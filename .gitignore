@@ -169,3 +169,5 @@ jspm_packages/
 
 # Stores VSCode versions used for testing VSCode extensions
 .vscode-test
+frontend/MIGRATION_SUMMARY.md
+MCP_UTILIZATION.md
