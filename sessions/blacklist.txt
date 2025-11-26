@@ -1,0 +1,11 @@
+PickerHost.exe
+SearchHost.exe
+StartMenuExperienceHost.exe
+LockApp.exe
+backgroundTaskHost.exe
+ApplicationFrameHost.exe
+ShellExperienceHost.exe
+TextInputHost.exe
+SystemSettings.exe
+Taskmgr.exe
+explorer.exe

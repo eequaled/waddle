@@ -1,235 +1,188 @@
 package main
 
 import (
-	"context"
 	"fmt"
+	"ideathon/pkg/capture"
 	"ideathon/pkg/content"
-	"ideathon/pkg/storage"
+	"ideathon/pkg/ocr"
+	"ideathon/pkg/server"
 	"ideathon/pkg/tracker"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 )
 
 func main() {
-	fmt.Println("Starting Memory App...")
+	fmt.Println("Starting Session Tracker...")
 
-	// 1. Initialize Storage
+	// 1. Initialize Storage Root
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Printf("Error getting home directory: %v\n", err)
 		return
 	}
-	// Use the specific path requested by the user
-	// In a production app, we might want to make this configurable via flags or config file
-	logDir := filepath.Join(homeDir, "OneDrive", "Documents", "ideathon txt experiments")
-	logger, err := storage.NewLogger(logDir)
-	if err != nil {
-		fmt.Printf("Error initializing logger: %v\n", err)
+	// Base directory for all sessions
+	sessionRootDir := filepath.Join(homeDir, "OneDrive", "Documents", "ideathon", "sessions")
+	if err := os.MkdirAll(sessionRootDir, 0755); err != nil {
+		fmt.Printf("Error creating session root directory: %v\n", err)
 		return
 	}
-	fmt.Printf("Logging to: %s\n", logDir)
+	fmt.Printf("Saving sessions to: %s\n", sessionRootDir)
 
 	// 2. Initialize Modules
 	trackerPoller := tracker.NewPoller()
 	clipboardMonitor := content.NewMonitor()
 
-	// 3. Start Monitoring
+	// 3. Start API Server
+	apiServer := server.NewServer(sessionRootDir, "8080")
+	apiServer.Start()
+
+	// 4. Start Monitoring
 	focusChan := trackerPoller.Start()
 	clipboardChan := clipboardMonitor.Start()
 
-	// 4. Handle OS Signals for Graceful Shutdown
+	// 5. Handle OS Signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	fmt.Println("Monitoring active... Press Ctrl+C to stop.")
 
-	// 5. Main Event Loop
+	// 6. State Management
+	var (
+		currentAppName string
+		currentTitle   string
+		currentHandle  syscall.Handle
+		currentDir     string
+	)
 
-	// Session Management
-	type Session struct {
-		sync.Mutex
-		AppName   string
-		Title     string
-		StartTime time.Time
-		LastText  string
+	// Ticker for screenshots (e.g., every 5 seconds)
+	screenshotTicker := time.NewTicker(5 * time.Second)
+	defer screenshotTicker.Stop()
+
+	// Helper to sanitize filenames
+	sanitize := func(name string) string {
+		invalid := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"}
+		for _, char := range invalid {
+			name = strings.ReplaceAll(name, char, "_")
+		}
+		return strings.TrimSpace(name)
 	}
 
-	var (
-		currentSession *Session
-		cancelFunc     context.CancelFunc
-	)
+	// Helper to load blacklist
+	loadBlacklist := func() map[string]bool {
+		bl := make(map[string]bool)
+		path := filepath.Join(sessionRootDir, "blacklist.txt")
+		content, err := os.ReadFile(path)
+		if err == nil {
+			lines := strings.Split(string(content), "\n")
+			for _, line := range lines {
+				trimmed := strings.TrimSpace(line)
+				if trimmed != "" {
+					bl[strings.ToLower(trimmed)] = true
+				}
+			}
+		}
+		return bl
+	}
 
 	for {
 		select {
 		case focusEvent := <-focusChan:
-			// 1. Close Previous Session
-			if cancelFunc != nil {
-				cancelFunc() // Stop the background poller
+			// Check Blacklist
+			blacklist := loadBlacklist() // Reload occasionally or on every event? File I/O is fast enough for focus changes.
+			if blacklist[strings.ToLower(focusEvent.AppName)] {
+				// fmt.Printf("Skipping blacklisted app: %s\n", focusEvent.AppName)
+				currentDir = ""
+				currentHandle = 0
+				continue
 			}
 
-			if currentSession != nil {
-				currentSession.Lock()
-				text := currentSession.LastText
-				startTime := currentSession.StartTime
-				appName := currentSession.AppName
-				currentSession.Unlock()
+			// Update State
+			currentAppName = focusEvent.AppName
+			currentTitle = focusEvent.Title
+			currentHandle = focusEvent.Handle
 
-				if text != "" {
-					// Save to file
-					safeApp := filepath.Base(appName)
-					safeApp = strings.TrimSuffix(safeApp, filepath.Ext(safeApp))
-					filename := fmt.Sprintf("%s_%s.txt", startTime.Format("2006-01-02_15-04-05"), safeApp)
-					fullPath := filepath.Join(logDir, filename)
-
-					if err := os.WriteFile(fullPath, []byte(text), 0644); err != nil {
-						fmt.Printf("Error saving session file: %v\n", err)
-					} else {
-						fmt.Printf("   > Session saved: %s (%d chars)\n", filename, len(text))
-					}
-				}
+			// Create Directory: sessions/YYYY-MM-DD/AppName
+			dateStr := time.Now().Format("2006-01-02")
+			safeAppName := sanitize(currentAppName)
+			if safeAppName == "" {
+				safeAppName = "UnknownApp"
 			}
 
-			// 2. Log New Focus
-			header := fmt.Sprintf("\n[%s] === FOCUS: %s (%s) ===\n",
-				focusEvent.Timestamp.Format("15:04:05"),
-				focusEvent.AppName,
-				focusEvent.Title,
-			)
-			fmt.Print(header)
-			if err := logger.Log(header); err != nil {
-				fmt.Printf("Error writing to log: %v\n", err)
+			currentDir = filepath.Join(sessionRootDir, dateStr, safeAppName)
+			if err := os.MkdirAll(currentDir, 0755); err != nil {
+				fmt.Printf("Error creating app directory: %v\n", err)
+				currentDir = "" // Disable saving if dir creation fails
+			} else {
+				fmt.Printf("\n[FOCUS] %s (%s)\n", currentAppName, currentTitle)
 			}
 
-			// 3. Start New Session
-			currentSession = &Session{
-				AppName:   focusEvent.AppName,
-				Title:     focusEvent.Title,
-				StartTime: focusEvent.Timestamp,
-			}
+		case <-screenshotTicker.C:
+			if currentDir != "" && currentHandle != 0 {
+				// Capture Screenshot
+				timestamp := time.Now().Format("15-04-05")
+				filename := fmt.Sprintf("%s.png", timestamp)
+				fullPath := filepath.Join(currentDir, filename)
 
-			var ctx context.Context
-			ctx, cancelFunc = context.WithCancel(context.Background())
+				// Capture
+				err := capture.SaveActiveWindow(currentHandle, fullPath)
+				if err != nil {
+					// fmt.Printf("Failed to capture: %v\n", err)
+				} else {
+					fmt.Printf(".") // Progress indicator
 
-			// Start Background Poller for this session
-			go func(ctx context.Context, sess *Session) {
-				// Initial delay
-				time.Sleep(2 * time.Second)
-
-				ticker := time.NewTicker(10 * time.Second)
-				defer ticker.Stop()
-
-				// Immediate first run after delay
-				capture := func() {
-					text, err := content.ExtractContext()
-					if err != nil {
-						// fmt.Printf("Error extracting context: %v\n", err) // Optional: reduce noise
-						return
-					}
-					if text != "" {
-						sess.Lock()
-						sess.LastText = text
-						sess.Unlock()
-						// fmt.Printf("   > Captured %d chars\n", len(text)) // Debug feedback
-					}
-				}
-
-				// Check if context is already done before first capture
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					capture()
-				}
-
-				for {
-					select {
-					case <-ctx.Done():
-						return
-					case <-ticker.C:
-						// Check for 2-hour session limit
-						sess.Lock()
-						if time.Since(sess.StartTime) > 2*time.Hour {
-							// Rotate session
-							oldText := sess.LastText
-							oldStart := sess.StartTime
-							oldApp := sess.AppName
-
-							// Reset for new chunk
-							sess.StartTime = time.Now()
-							sess.LastText = "" // Optional: clear text to avoid duplicate logging if no new text comes in?
-							// Actually, keep LastText so we don't lose context if user is idle.
-							// But if we write the file, we effectively "archived" that text.
-							// Let's keep it, but the new file will start with it.
-							// User said "wont write the same session forever".
-							// If we save now, we save 0-2h.
-							// Next save (at 4h or close) will save 2h-4h.
-							// If text hasn't changed, 2h-4h file will be identical to 0-2h file.
-							// That might be what "same session forever" means.
-							// But if the user is active, text changes.
-							sess.Unlock()
-
-							if oldText != "" {
-								safeApp := filepath.Base(oldApp)
-								safeApp = strings.TrimSuffix(safeApp, filepath.Ext(safeApp))
-								filename := fmt.Sprintf("%s_%s.txt", oldStart.Format("2006-01-02_15-04-05"), safeApp)
-								fullPath := filepath.Join(logDir, filename)
-								if err := os.WriteFile(fullPath, []byte(oldText), 0644); err != nil {
-									fmt.Printf("Error saving session chunk: %v\n", err)
-								} else {
-									fmt.Printf("   > Session chunk saved: %s\n", filename)
-								}
-							}
-						} else {
-							sess.Unlock()
+					// Trigger OCR in background
+					go func(img, dir string) {
+						text, err := ocr.ExtractText(img)
+						if err != nil {
+							// fmt.Printf("OCR Error: %v\n", err)
+							return
+						}
+						if text == "" {
+							return
 						}
 
-						capture()
-					}
+						// Append to ocr.txt
+						ocrPath := filepath.Join(dir, "ocr.txt")
+						f, err := os.OpenFile(ocrPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+						if err != nil {
+							return
+						}
+						defer f.Close()
+
+						entry := fmt.Sprintf("[%s] %s\n\n", filepath.Base(img), text)
+						f.WriteString(entry)
+					}(fullPath, currentDir)
 				}
-			}(ctx, currentSession)
+			}
 
 		case clipboardEvent := <-clipboardChan:
-			// Log Captured Content
-			logEntry := fmt.Sprintf("   > \"Captured text: %s\"\n", clipboardEvent.Content)
+			if currentDir != "" {
+				// Save clipboard content
+				logPath := filepath.Join(currentDir, "clipboard.txt")
 
-			// Console feedback (truncated)
-			displayContent := clipboardEvent.Content
-			if len(displayContent) > 50 {
-				displayContent = displayContent[:50] + "..."
-			}
-			fmt.Printf("   > Captured: %q\n", displayContent)
+				f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+				if err != nil {
+					fmt.Printf("Error opening clipboard log: %v\n", err)
+					continue
+				}
 
-			if err := logger.Log(logEntry); err != nil {
-				fmt.Printf("Error writing to log: %v\n", err)
+				timestamp := time.Now().Format("15:04:05")
+				entry := fmt.Sprintf("[%s] %s\n\n", timestamp, clipboardEvent.Content)
+
+				if _, err := f.WriteString(entry); err != nil {
+					fmt.Printf("Error writing to clipboard log: %v\n", err)
+				}
+				f.Close()
+
+				fmt.Printf("\n[CLIPBOARD] Saved to %s\n", filepath.Base(currentDir))
 			}
 
 		case <-sigChan:
 			fmt.Println("\nShutting down...")
-			// Save pending session on exit
-			if cancelFunc != nil {
-				cancelFunc()
-			}
-			if currentSession != nil {
-				currentSession.Lock()
-				text := currentSession.LastText
-				startTime := currentSession.StartTime
-				appName := currentSession.AppName
-				currentSession.Unlock()
-
-				if text != "" {
-					safeApp := filepath.Base(appName)
-					safeApp = strings.TrimSuffix(safeApp, filepath.Ext(safeApp))
-					filename := fmt.Sprintf("%s_%s.txt", startTime.Format("2006-01-02_15-04-05"), safeApp)
-					fullPath := filepath.Join(logDir, filename)
-					os.WriteFile(fullPath, []byte(text), 0644)
-					fmt.Printf("   > Final session saved: %s\n", filename)
-				}
-			}
 			return
 		}
 	}

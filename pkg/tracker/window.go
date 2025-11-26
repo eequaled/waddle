@@ -30,6 +30,7 @@ type FocusEvent struct {
 	AppName   string
 	PID       uint32
 	Title     string
+	Handle    syscall.Handle
 }
 
 type Poller struct {
@@ -79,6 +80,7 @@ func (p *Poller) poll() {
 					AppName:   exeName,
 					PID:       pid,
 					Title:     title,
+					Handle:    currentHwnd,
 				}
 
 				reportedHwnd = currentHwnd
