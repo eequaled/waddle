@@ -9,23 +9,17 @@ import (
 	"strings"
 )
 
-// ExtractText takes an image path and returns the text found in it using Windows OCR.
+// ExtractText uses Tesseract OCR to extract text from an image
 func ExtractText(imagePath string) (string, error) {
-	// Resolve script path
-	// Assuming the binary is run from the project root or the script is in a known location relative to the executable.
-	// For dev (go run), it's in pkg/ocr/scripts/ocr.ps1
-
-	// Try to find the script
-	scriptPath := filepath.Join("pkg", "ocr", "scripts", "ocr.ps1")
-	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
-		// Try absolute path if we are in a different working directory
-		// Or maybe we should embed it? For now, let's assume CWD is project root.
-		return "", fmt.Errorf("OCR script not found at %s", scriptPath)
+	// Find tesseract executable
+	tesseractPath := findTesseract()
+	if tesseractPath == "" {
+		return "", fmt.Errorf("tesseract not found. Please install from: https://github.com/UB-Mannheim/tesseract/wiki")
 	}
 
 	// Prepare command
-	// -NoProfile -ExecutionPolicy Bypass -File <script> -ImagePath <image>
-	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath, "-ImagePath", imagePath)
+	// tesseract image.png stdout (outputs to stdout instead of file)
+	cmd := exec.Command(tesseractPath, imagePath, "stdout", "-l", "eng", "--psm", "3")
 
 	var out bytes.Buffer
 	var stderr bytes.Buffer
@@ -35,16 +29,41 @@ func ExtractText(imagePath string) (string, error) {
 	// Execute
 	err := cmd.Run()
 	if err != nil {
-		return "", fmt.Errorf("OCR execution failed: %v, stderr: %s", err, stderr.String())
+		return "", fmt.Errorf("tesseract execution failed: %v, stderr: %s", err, stderr.String())
 	}
 
 	// Clean output
-	output := strings.TrimSpace(out.String())
+	text := strings.TrimSpace(out.String())
 
-	// Check for script errors that might be printed to stdout
-	if strings.HasPrefix(output, "Error:") {
-		return "", fmt.Errorf("OCR script error: %s", output)
+	return text, nil
+}
+
+// findTesseract locates the tesseract executable
+// Checks: bundled bin, common install locations, PATH
+func findTesseract() string {
+	// 1. Check bundled location (for distribution)
+	bundledPath := filepath.Join("pkg", "ocr", "bin", "tesseract.exe")
+	if _, err := os.Stat(bundledPath); err == nil {
+		return bundledPath
 	}
 
-	return output, nil
+	// 2. Check common install locations
+	commonPaths := []string{
+		`C:\Program Files\Tesseract-OCR\tesseract.exe`,
+		`C:\Program Files (x86)\Tesseract-OCR\tesseract.exe`,
+	}
+
+	for _, path := range commonPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+
+	// 3. Check PATH
+	path, err := exec.LookPath("tesseract")
+	if err == nil {
+		return path
+	}
+
+	return ""
 }
