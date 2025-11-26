@@ -1,4 +1,4 @@
-export type AppType = 'Chrome' | 'Slack' | 'Notes' | 'Spotify' | 'Figma' | 'VS Code' | 'Zoom' | 'Excel' | 'Terminal';
+export type AppType = string;
 
 export interface Activity {
   id: string;
@@ -7,9 +7,9 @@ export interface Activity {
   timestamp: string;
 }
 
-export interface EditorBlock {
+export interface ContentBlock {
   id: string;
-  type: 'heading' | 'paragraph' | 'todo' | 'image' | 'code' | 'summary';
+  type: 'heading' | 'paragraph' | 'todo' | 'image' | 'code' | 'summary' | 'link';
   content: string;
   checked?: boolean; // for todo
   language?: string; // for code
@@ -25,6 +25,6 @@ export interface Session {
   duration: string;
   apps: AppType[];
   activities: Activity[]; // For the drill-down
-  content: EditorBlock[]; // For the editor
-  date: 'Today' | 'Yesterday' | 'Last Week';
+  content: ContentBlock[]; // For the editor
+  date: string;
 }

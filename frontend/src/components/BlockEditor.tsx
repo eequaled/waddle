@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Block } from '../types';
+import { ContentBlock as Block } from '../types';
 import { Type, Code, Image as ImageIcon, Link as LinkIcon, CheckSquare, Heading1 } from 'lucide-react';
 
 interface BlockEditorProps {
@@ -44,7 +44,7 @@ export function BlockEditor({ blocks, onBlocksChange }: BlockEditorProps) {
 
   const insertBlock = (type: Block['type']) => {
     if (!activeBlockId) return;
-    
+
     const blockIndex = blocks.findIndex(b => b.id === activeBlockId);
     const newBlocks = [...blocks];
     newBlocks[blockIndex] = {
@@ -58,14 +58,14 @@ export function BlockEditor({ blocks, onBlocksChange }: BlockEditorProps) {
   };
 
   const updateBlockContent = (blockId: string, content: string) => {
-    const newBlocks = blocks.map(b => 
+    const newBlocks = blocks.map(b =>
       b.id === blockId ? { ...b, content } : b
     );
     onBlocksChange(newBlocks);
   };
 
   const toggleTodo = (blockId: string) => {
-    const newBlocks = blocks.map(b => 
+    const newBlocks = blocks.map(b =>
       b.id === blockId ? { ...b, checked: !b.checked } : b
     );
     onBlocksChange(newBlocks);
@@ -75,7 +75,7 @@ export function BlockEditor({ blocks, onBlocksChange }: BlockEditorProps) {
     const handleClickOutside = () => {
       setShowCommandMenu(false);
     };
-    
+
     if (showCommandMenu) {
       document.addEventListener('click', handleClickOutside);
       return () => document.removeEventListener('click', handleClickOutside);
@@ -104,18 +104,18 @@ export function BlockEditor({ blocks, onBlocksChange }: BlockEditorProps) {
   );
 }
 
-function BlockComponent({ 
-  block, 
-  onKeyDown, 
+function BlockComponent({
+  block,
+  onKeyDown,
   onContentChange,
-  onToggleTodo 
-}: { 
-  block: Block; 
+  onToggleTodo
+}: {
+  block: Block;
   onKeyDown: (e: React.KeyboardEvent) => void;
   onContentChange: (content: string) => void;
   onToggleTodo: () => void;
 }) {
-  const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+  const handleInput = (e: React.FormEvent<HTMLElement>) => {
     onContentChange(e.currentTarget.textContent || '');
   };
 
@@ -126,8 +126,7 @@ function BlockComponent({
         suppressContentEditableWarning
         onKeyDown={onKeyDown}
         onInput={handleInput}
-        className="text-3xl text-slate-100 mb-4 outline-none"
-        placeholder="Heading"
+        className="text-3xl text-slate-100 mb-4 outline-none empty:before:content-['Heading'] empty:before:text-slate-600"
       >
         {block.content}
       </div>
@@ -193,6 +192,18 @@ function BlockComponent({
     );
   }
 
+  if (block.type === 'image') {
+    return (
+      <div className="mb-4 rounded-lg overflow-hidden border border-slate-700 bg-slate-900">
+        <img
+          src={block.content}
+          alt="Session Screenshot"
+          className="w-full h-auto max-h-[500px] object-contain"
+        />
+      </div>
+    );
+  }
+
   // Default paragraph
   return (
     <div
@@ -200,18 +211,17 @@ function BlockComponent({
       suppressContentEditableWarning
       onKeyDown={onKeyDown}
       onInput={handleInput}
-      className="text-slate-300 mb-3 outline-none"
-      placeholder="Type '/' for commands"
+      className="text-slate-300 mb-3 outline-none empty:before:content-['Type_/_for_commands'] empty:before:text-slate-600"
     >
       {block.content}
     </div>
   );
 }
 
-function CommandMenu({ 
-  position, 
-  onSelect 
-}: { 
+function CommandMenu({
+  position,
+  onSelect
+}: {
   position: { top: number; left: number };
   onSelect: (type: Block['type']) => void;
 }) {
@@ -224,7 +234,7 @@ function CommandMenu({
   ];
 
   return (
-    <div 
+    <div
       className="fixed bg-slate-800 border border-slate-700 rounded-lg shadow-xl p-2 z-50 min-w-[200px]"
       style={{ top: position.top + 4, left: position.left }}
       onClick={(e) => e.stopPropagation()}
