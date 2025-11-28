@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ContentBlock } from '../types';
 import { CheckSquare } from 'lucide-react';
 import { ImageLightbox } from './ImageLightbox';
+import { AppMemoryCard } from './AppMemoryCard';
 
 interface BlockRendererProps {
   block: ContentBlock;
@@ -85,6 +86,17 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({ block }) => {
           {block.content}
         </code>
       </pre>
+    );
+  }
+
+  if (block.type === 'app-memory') {
+    return (
+      <AppMemoryCard
+        appName={block.data?.appName || block.content}
+        latestScreenshot={block.data?.latestScreenshot}
+        blocks={block.data?.blocks || []}
+        timestamp={block.data?.timestamp}
+      />
     );
   }
 

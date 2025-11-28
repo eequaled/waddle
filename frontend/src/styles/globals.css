@@ -189,3 +189,42 @@
 html {
   font-size: var(--font-size);
 }
+
+/* Duck Mode Styles */
+.duck.light {
+  --background: 45 100% 95%;
+  --foreground: 20 14.3% 4.1%;
+  background-image: url('/assets/wallpapers/duck light mode.png');
+  background-size: cover;
+  background-attachment: fixed;
+}
+
+.duck.dark {
+  --background: 20 14.3% 4.1%;
+  --foreground: 45 100% 95%;
+  background-image: url('/assets/wallpapers/duck dark mode.png');
+  background-size: cover;
+  background-attachment: fixed;
+}
+
+/* Sunset Mode (Easter Egg) */
+.duck.sunset {
+  background-image: url('/assets/wallpapers/duck secret mode (sunset).png') !important;
+  background-size: cover;
+  background-attachment: fixed;
+}
+
+/* Ensure content is readable over wallpapers */
+.duck .bg-background {
+  background-color: rgba(var(--background), 0.85);
+  /* Fallback */
+  background-color: color-mix(in srgb, var(--background), transparent 15%);
+  backdrop-filter: blur(8px);
+}
+
+/* Dim Sidebar in Duck Mode */
+.duck aside {
+  background-color: rgba(var(--background), 0.6);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(var(--border), 0.2);
+}

@@ -8,17 +8,20 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 )
 
 type Server struct {
-	rootDir string
-	port    string
+	rootDir  string
+	port     string
+	isPaused *atomic.Bool
 }
 
-func NewServer(rootDir string, port string) *Server {
+func NewServer(rootDir string, port string, isPaused *atomic.Bool) *Server {
 	return &Server{
-		rootDir: rootDir,
-		port:    port,
+		rootDir:  rootDir,
+		port:     port,
+		isPaused: isPaused,
 	}
 }
 
@@ -41,6 +44,12 @@ func (s *Server) Start() {
 	// API Endpoints
 	mux.HandleFunc("/api/sessions", cors(s.handleSessions))
 	mux.HandleFunc("/api/sessions/", cors(s.handleAppDetails)) // Wildcard for dates
+
+	// Status Endpoint
+	mux.HandleFunc("/api/status", cors(s.handleStatus))
+
+	// Blacklist Endpoint
+	mux.HandleFunc("/api/blacklist", cors(s.handleBlacklist))
 
 	// Static Files (Images)
 	fileServer := http.FileServer(http.Dir(s.rootDir))
@@ -70,6 +79,81 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(dates)
 }
 
+// GET /api/status -> Returns { "paused": bool }
+// POST /api/status -> Body { "paused": bool } -> Updates status
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		json.NewEncoder(w).Encode(map[string]bool{
+			"paused": s.isPaused.Load(),
+		})
+		return
+	}
+
+	if r.Method == "POST" {
+		var body struct {
+			Paused bool `json:"paused"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.isPaused.Store(body.Paused)
+		json.NewEncoder(w).Encode(map[string]bool{
+			"paused": s.isPaused.Load(),
+		})
+		return
+	}
+
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+
+// GET /api/blacklist -> Returns [ "app.exe", ... ]
+// POST /api/blacklist -> Body [ "app.exe", ... ] -> Writes to file
+func (s *Server) handleBlacklist(w http.ResponseWriter, r *http.Request) {
+	blacklistPath := filepath.Join(s.rootDir, "blacklist.txt")
+
+	if r.Method == "GET" {
+		content, err := os.ReadFile(blacklistPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				json.NewEncoder(w).Encode([]string{})
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		lines := strings.Split(string(content), "\n")
+		var apps []string
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed != "" {
+				apps = append(apps, trimmed)
+			}
+		}
+		json.NewEncoder(w).Encode(apps)
+		return
+	}
+
+	if r.Method == "POST" {
+		var apps []string
+		if err := json.NewDecoder(r.Body).Decode(&apps); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Write to file
+		data := strings.Join(apps, "\n")
+		if err := os.WriteFile(blacklistPath, []byte(data), 0644); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(apps)
+		return
+	}
+
+	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+}
+
 // GET /api/sessions/{date} -> Returns list of apps
 // GET /api/sessions/{date}/{app} -> Returns details (images, text)
 func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
@@ -86,12 +170,34 @@ func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		var apps []string
+		type AppEntry struct {
+			Name    string
+			ModTime int64
+		}
+		var appEntries []AppEntry
+
 		for _, e := range entries {
 			if e.IsDir() {
-				apps = append(apps, e.Name())
+				info, err := e.Info()
+				if err == nil {
+					appEntries = append(appEntries, AppEntry{
+						Name:    e.Name(),
+						ModTime: info.ModTime().Unix(),
+					})
+				}
 			}
 		}
+
+		// Sort by ModTime descending
+		sort.Slice(appEntries, func(i, j int) bool {
+			return appEntries[i].ModTime > appEntries[j].ModTime
+		})
+
+		var apps []string
+		for _, e := range appEntries {
+			apps = append(apps, e.Name)
+		}
+
 		json.NewEncoder(w).Encode(apps)
 		return
 	}
@@ -107,7 +213,38 @@ func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// List files
+		// Check if requesting blocks
+		if len(parts) == 3 && parts[2] == "blocks" {
+			blocksDir := filepath.Join(appDir, "blocks")
+			entries, err := os.ReadDir(blocksDir)
+			if err != nil {
+				// Return empty list if no blocks yet
+				json.NewEncoder(w).Encode([]interface{}{})
+				return
+			}
+
+			type BlockData struct {
+				ID           string `json:"id"`
+				StartTime    string `json:"startTime"`
+				EndTime      string `json:"endTime"`
+				MicroSummary string `json:"microSummary"`
+				OCRText      string `json:"ocrText"`
+			}
+			var blocks []BlockData
+
+			for _, e := range entries {
+				if strings.HasSuffix(e.Name(), ".json") {
+					content, _ := os.ReadFile(filepath.Join(blocksDir, e.Name()))
+					var block BlockData
+					json.Unmarshal(content, &block)
+					blocks = append(blocks, block)
+				}
+			}
+			json.NewEncoder(w).Encode(blocks)
+			return
+		}
+
+		// List files (Default behavior)
 		entries, err := os.ReadDir(appDir)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
