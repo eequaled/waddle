@@ -171,3 +171,4 @@ jspm_packages/
 .vscode-test
 frontend/MIGRATION_SUMMARY.md
 MCP_UTILIZATION.md
+/frontend/public/assets

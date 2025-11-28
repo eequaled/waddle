@@ -2,15 +2,18 @@ package main
 
 import (
 	"fmt"
+	"ideathon/pkg/ai"
 	"ideathon/pkg/capture"
 	"ideathon/pkg/content"
 	"ideathon/pkg/ocr"
+	"ideathon/pkg/processing"
 	"ideathon/pkg/server"
 	"ideathon/pkg/tracker"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -36,21 +39,55 @@ func main() {
 	trackerPoller := tracker.NewPoller()
 	clipboardMonitor := content.NewMonitor()
 
-	// 3. Start API Server
-	apiServer := server.NewServer(sessionRootDir, "8080")
+	// 3. Start Background Processors
+	// OCR Batch Processor (Clean up screenshots, extract text)
+	batchProcessor := processing.NewBatchProcessor(sessionRootDir)
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := batchProcessor.ProcessAll(); err != nil {
+				fmt.Printf("Batch processing error: %v\n", err)
+			}
+		}
+	}()
+
+	// AI Memory Manager (Summarize text)
+	// Using gemma2:2b as a small, efficient local model
+	ollamaClient := ai.NewOllamaClient("", "gemma2:2b")
+	memoryManager := processing.NewMemoryManager(sessionRootDir, ollamaClient)
+	go func() {
+		// Initial run to process existing data
+		if err := memoryManager.ProcessMemories(); err != nil {
+			fmt.Printf("Memory processing error: %v\n", err)
+		}
+
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			fmt.Println("Running AI Memory processing...")
+			if err := memoryManager.ProcessMemories(); err != nil {
+				fmt.Printf("Memory processing error: %v\n", err)
+			}
+		}
+	}()
+
+	// 4. Start API Server
+	isPaused := &atomic.Bool{}
+	apiServer := server.NewServer(sessionRootDir, "8080", isPaused)
 	apiServer.Start()
 
-	// 4. Start Monitoring
+	// 5. Start Monitoring
 	focusChan := trackerPoller.Start()
 	clipboardChan := clipboardMonitor.Start()
 
-	// 5. Handle OS Signals
+	// 6. Handle OS Signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	fmt.Println("Monitoring active... Press Ctrl+C to stop.")
 
-	// 6. State Management
+	// 7. State Management
 	var (
 		currentAppName string
 		currentTitle   string
@@ -91,10 +128,17 @@ func main() {
 	for {
 		select {
 		case focusEvent := <-focusChan:
+			fmt.Printf("[DEBUG] Focus Event: %s (%s)\n", focusEvent.AppName, focusEvent.Title)
+			// Check if paused
+			if isPaused.Load() {
+				currentDir = ""
+				currentHandle = 0
+				continue
+			}
+
 			// Check Blacklist
-			blacklist := loadBlacklist() // Reload occasionally or on every event? File I/O is fast enough for focus changes.
+			blacklist := loadBlacklist()
 			if blacklist[strings.ToLower(focusEvent.AppName)] {
-				// fmt.Printf("Skipping blacklisted app: %s\n", focusEvent.AppName)
 				currentDir = ""
 				currentHandle = 0
 				continue
@@ -115,12 +159,15 @@ func main() {
 			currentDir = filepath.Join(sessionRootDir, dateStr, safeAppName)
 			if err := os.MkdirAll(currentDir, 0755); err != nil {
 				fmt.Printf("Error creating app directory: %v\n", err)
-				currentDir = "" // Disable saving if dir creation fails
+				currentDir = ""
 			} else {
 				fmt.Printf("\n[FOCUS] %s (%s)\n", currentAppName, currentTitle)
 			}
 
 		case <-screenshotTicker.C:
+			if isPaused.Load() {
+				continue
+			}
 			if currentDir != "" && currentHandle != 0 {
 				// Capture Screenshot
 				timestamp := time.Now().Format("15-04-05")
@@ -130,7 +177,7 @@ func main() {
 				// Capture
 				err := capture.SaveActiveWindow(currentHandle, fullPath)
 				if err != nil {
-					// fmt.Printf("Failed to capture: %v\n", err)
+					fmt.Printf("[DEBUG] Failed to capture: %v\n", err)
 				} else {
 					fmt.Printf(".") // Progress indicator
 
@@ -138,7 +185,6 @@ func main() {
 					go func(img, dir string) {
 						text, err := ocr.ExtractText(img)
 						if err != nil {
-							// fmt.Printf("OCR Error: %v\n", err)
 							return
 						}
 						if text == "" {

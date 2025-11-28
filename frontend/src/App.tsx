@@ -4,7 +4,7 @@ import { MainEditor } from './components/MainEditor';
 import { SearchModal } from './components/SearchModal';
 import { SettingsModal } from './components/SettingsModal';
 import { Toaster } from './components/ui/sonner';
-import { User, Settings, Bell } from 'lucide-react';
+import { User, Settings, Bell, Play, Pause, Circle } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { api, transformToSession } from './services/api';
 import { Session } from './types';
@@ -14,6 +14,65 @@ function App() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+
+  // Theme State
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+  const [isDuckMode, setIsDuckMode] = useState(false);
+  const [isSunset, setIsSunset] = useState(false);
+  const [themeSwitchCount, setThemeSwitchCount] = useState(0);
+  const [lastSwitchTime, setLastSwitchTime] = useState(0);
+
+  // Apply Theme
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark', 'duck');
+    root.classList.add(theme);
+    if (isDuckMode) {
+      root.classList.add('duck');
+    }
+    if (isSunset) {
+      root.classList.add('sunset');
+    } else {
+      root.classList.remove('sunset');
+    }
+  }, [theme, isDuckMode, isSunset]);
+
+  const handleThemeChange = (newTheme: 'light' | 'dark') => {
+    setTheme(newTheme);
+
+    // Easter Egg Logic (Only in Duck Mode)
+    if (isDuckMode) {
+      const now = Date.now();
+      if (now - lastSwitchTime < 1000) {
+        const newCount = themeSwitchCount + 1;
+        setThemeSwitchCount(newCount);
+        if (newCount >= 5 && !isSunset) {
+          setIsSunset(true);
+          // Play Quack Sound
+          const audio = new Audio('/assets/sounds/quack.mp3');
+          audio.play().catch(console.error);
+        }
+      } else {
+        setThemeSwitchCount(0);
+      }
+      setLastSwitchTime(now);
+    }
+  };
+
+  // Fetch Status on Mount
+  useEffect(() => {
+    api.getStatus().then(status => setIsPaused(status.paused)).catch(console.error);
+  }, []);
+
+  const toggleStatus = async () => {
+    try {
+      const newStatus = await api.setStatus(!isPaused);
+      setIsPaused(newStatus.paused);
+    } catch (error) {
+      console.error("Failed to toggle status:", error);
+    }
+  };
 
   // Fetch Sessions on Mount
   useEffect(() => {
@@ -57,7 +116,7 @@ function App() {
 
   // Force dark mode for the prototype to match the design
   return (
-    <div className="dark h-screen w-full">
+    <div className="h-screen w-full">
       <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden font-sans antialiased">
 
         {/* Top Navigation Bar */}
@@ -78,6 +137,25 @@ function App() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant={isPaused ? "outline" : "default"}
+              size="sm"
+              className={`gap-2 ${isPaused ? "border-red-500 text-red-500 hover:bg-red-500/10" : "bg-green-600 hover:bg-green-700"}`}
+              onClick={toggleStatus}
+            >
+              {isPaused ? (
+                <>
+                  <Circle size={14} className="fill-current" />
+                  Stopped
+                </>
+              ) : (
+                <>
+                  <Circle size={14} className="fill-current animate-pulse" />
+                  Recording
+                </>
+              )}
+            </Button>
+
             <Button variant="ghost" size="icon" className="text-muted-foreground">
               <Bell size={18} />
             </Button>
@@ -121,6 +199,10 @@ function App() {
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
+          currentTheme={theme}
+          onThemeChange={handleThemeChange}
+          isDuckMode={isDuckMode}
+          onDuckModeChange={setIsDuckMode}
         />
 
         <Toaster />

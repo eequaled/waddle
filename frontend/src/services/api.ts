@@ -19,6 +19,44 @@ export const api = {
         const response = await fetch(`${API_BASE}/sessions/${date}/${app}`);
         if (!response.ok) throw new Error('Failed to fetch app details');
         return response.json();
+    },
+
+    getAppBlocks: async (date: string, app: string): Promise<any[]> => {
+        const response = await fetch(`${API_BASE}/sessions/${date}/${app}/blocks`);
+        if (!response.ok) return [];
+        return response.json();
+    },
+
+    getStatus: async (): Promise<{ paused: boolean }> => {
+        const response = await fetch(`${API_BASE}/status`);
+        if (!response.ok) throw new Error('Failed to fetch status');
+        return response.json();
+    },
+
+    setStatus: async (paused: boolean): Promise<{ paused: boolean }> => {
+        const response = await fetch(`${API_BASE}/status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paused })
+        });
+        if (!response.ok) throw new Error('Failed to set status');
+        return response.json();
+    },
+
+    getBlacklist: async (): Promise<string[]> => {
+        const response = await fetch(`${API_BASE}/blacklist`);
+        if (!response.ok) throw new Error('Failed to fetch blacklist');
+        return response.json();
+    },
+
+    setBlacklist: async (apps: string[]): Promise<string[]> => {
+        const response = await fetch(`${API_BASE}/blacklist`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(apps)
+        });
+        if (!response.ok) throw new Error('Failed to set blacklist');
+        return response.json();
     }
 };
 
@@ -39,12 +77,16 @@ export const transformToSession = async (date: string): Promise<Session> => {
     for (const app of apps) {
         try {
             const details = await api.getAppDetails(date, app);
-            console.log(`[DEBUG] Got details for ${app}:`, details);
+            const blocks = await api.getAppBlocks(date, app);
 
-            // Validate that details is an array
-            if (!Array.isArray(details)) {
-                console.warn(`[WARN] Details for ${app} is not an array:`, details);
-                continue;
+            // Find latest screenshot
+            let latestScreenshot = '';
+            // Check for "latest.png" explicitly if available, or sort details
+            const images = details.filter(d => d.type === 'image');
+            if (images.length > 0) {
+                // If we have latest.png, use it. Otherwise use the last one.
+                const latest = images.find(img => img.name === 'latest.png') || images[images.length - 1];
+                latestScreenshot = latest.url;
             }
 
             // Add activity for the app
@@ -52,34 +94,23 @@ export const transformToSession = async (date: string): Promise<Session> => {
                 id: `act-${app}`,
                 app: app,
                 description: `Used ${app}`,
-                timestamp: 'All Day' // We could refine this if backend provided timestamps in list
+                timestamp: 'All Day'
             });
 
-            // Add heading for app
+            // Create App Memory Block
+            // This replaces the generic heading/image list with a rich card
             content.push({
-                id: `head-${app}`,
-                type: 'heading',
-                content: app
+                id: `mem-${app}`,
+                type: 'app-memory',
+                content: app,
+                data: {
+                    appName: app,
+                    latestScreenshot: latestScreenshot,
+                    blocks: blocks,
+                    timestamp: 'Session'
+                }
             });
 
-            // Add images and text
-            for (const file of details) {
-                if (file.type === 'image') {
-                    content.push({
-                        id: `img-${file.name}`,
-                        type: 'image',
-                        content: file.url
-                    });
-                } else if (file.type === 'text') {
-                    // Fetch text content (optional, or just show link)
-                    // For now, let's just show a note that text exists
-                    content.push({
-                        id: `txt-${file.name}`,
-                        type: 'paragraph',
-                        content: `Captured text available: ${file.name}`
-                    });
-                }
-            }
         } catch (error) {
             console.error(`[ERROR] Failed to load details for app ${app}:`, error);
         }
