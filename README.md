@@ -99,7 +99,7 @@ ollama pull gemma2:2b
 ```
 
 ## Project Structure
-
+(old and inaccurate not gonna remake this)
 ```
 ideathon/
 ├── main.go                    # Application entry point
