@@ -1,4 +1,4 @@
-# Comet — AI-Powered Second Brain for Developers
+# carandrier — AI-Powered Second Brain for Developers
 
 A local-first memory tool that silently captures your activity (focused windows, clipboard, and visible text), synthesizes sessions, and presents an intelligent interface to refine those into durable knowledge. Privacy-first and aligned with developer workflows.
 
