@@ -2,18 +2,22 @@ import React from 'react';
 import { Session } from '../types';
 import { SessionCard } from './SessionCard';
 import { ScrollArea } from './ui/scroll-area';
-import { Clock, MessageSquare, Layers } from 'lucide-react';
+import { Clock, MessageSquare, Layers, BarChart3 } from 'lucide-react';
 
 interface ActivityTimelineProps {
   sessions: Session[];
   selectedSessionId: string | null;
   onSelectSession: (id: string) => void;
+  activeView: 'timeline' | 'chat' | 'archives' | 'insights';
+  onViewChange: (view: 'timeline' | 'chat' | 'archives' | 'insights') => void;
 }
 
 export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
   sessions,
   selectedSessionId,
-  onSelectSession
+  onSelectSession,
+  activeView,
+  onViewChange
 }) => {
   // Group sessions by date
   const groupedSessions = sessions.reduce((acc, session) => {
@@ -33,15 +37,30 @@ export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
       </div>
 
       <div className="flex gap-2 p-2 px-4 border-b border-border/50 shrink-0">
-        {/* Sidebar Navigation / Icons as shown in the reference image top left */}
-        <div className="p-2 bg-primary/10 rounded-md text-primary">
+        {/* Sidebar Navigation */}
+        <div
+          className={`p-2 rounded-md cursor-pointer transition-colors ${activeView === 'timeline' ? 'bg-primary/10 text-primary' : 'hover:bg-accent text-muted-foreground'}`}
+          onClick={() => onViewChange('timeline')}
+        >
           <Clock size={20} />
         </div>
-        <div className="p-2 hover:bg-accent rounded-md text-muted-foreground cursor-pointer">
+        <div
+          className={`p-2 rounded-md cursor-pointer transition-colors ${activeView === 'chat' ? 'bg-primary/10 text-primary' : 'hover:bg-accent text-muted-foreground'}`}
+          onClick={() => onViewChange('chat')}
+        >
           <MessageSquare size={20} />
         </div>
-        <div className="p-2 hover:bg-accent rounded-md text-muted-foreground cursor-pointer">
+        <div
+          className={`p-2 rounded-md cursor-pointer transition-colors ${activeView === 'archives' ? 'bg-primary/10 text-primary' : 'hover:bg-accent text-muted-foreground'}`}
+          onClick={() => onViewChange('archives')}
+        >
           <Layers size={20} />
+        </div>
+        <div
+          className={`p-2 rounded-md cursor-pointer transition-colors ${activeView === 'insights' ? 'bg-primary/10 text-primary' : 'hover:bg-accent text-muted-foreground'}`}
+          onClick={() => onViewChange('insights')}
+        >
+          <BarChart3 size={20} />
         </div>
       </div>
 

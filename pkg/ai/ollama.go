@@ -58,13 +58,17 @@ func (c *OllamaClient) Summarize(appName, contextText string) (string, error) {
 		return "", fmt.Errorf("empty context provided")
 	}
 
-	prompt := fmt.Sprintf(`
-You are an AI assistant analyzing developer activity.
-App: %s
-Context:
+	prompt := fmt.Sprintf(`You are analyzing screen captures from %s.
+
+OCR Text:
 %s
 
-Task: Provide a concise, 2-3 sentence summary of what the user was doing in this session. Focus on specific actions, code changes, or topics.
+Extract the following from the EXACT text above (do not invent information):
+1. **Project/Work**: What specific project, file, or task is shown? Quote exact names/titles.
+2. **Links/Titles**: List any URLs, file paths, or document titles you see.
+3. **Topics**: What technologies/languages/tools are mentioned or visible?
+
+Be FACTUAL. Only report what you can directly see in the text. If something is unclear, say so.
 Summary:`, appName, contextText)
 
 	reqBody := GenerateRequest{
@@ -72,8 +76,8 @@ Summary:`, appName, contextText)
 		Prompt: prompt,
 		Stream: false,
 		Options: Options{
-			Temperature: 0.3, // Low temperature for factual summaries
-			NumPredict:  150, // Short summary
+			Temperature: 0.1, // Very low for factual extraction
+			NumPredict:  400, // Increased for detailed extraction
 		},
 	}
 

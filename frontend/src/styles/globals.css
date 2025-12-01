@@ -190,41 +190,296 @@ html {
   font-size: var(--font-size);
 }
 
-/* Duck Mode Styles */
-.duck.light {
-  --background: 45 100% 95%;
-  --foreground: 20 14.3% 4.1%;
-  background-image: url('/assets/wallpapers/duck light mode.png');
-  background-size: cover;
-  background-attachment: fixed;
+/* Prose/Typography styles for Markdown rendering */
+.prose,
+.prose-sm {
+  color: inherit !important;
+  max-width: none !important;
 }
 
-.duck.dark {
-  --background: 20 14.3% 4.1%;
-  --foreground: 45 100% 95%;
-  background-image: url('/assets/wallpapers/duck dark mode.png');
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6,
+.prose-sm h1,
+.prose-sm h2,
+.prose-sm h3,
+.prose-sm h4,
+.prose-sm h5,
+.prose-sm h6 {
+  color: inherit !important;
+  font-weight: 600 !important;
+  margin-top: 0.75em !important;
+  margin-bottom: 0.5em !important;
+}
+
+.prose h1,
+.prose-sm h1 {
+  font-size: 1.5em !important;
+}
+
+.prose h2,
+.prose-sm h2 {
+  font-size: 1.25em !important;
+}
+
+.prose h3,
+.prose-sm h3 {
+  font-size: 1.1em !important;
+}
+
+.prose h4,
+.prose-sm h4 {
+  font-size: 1em !important;
+}
+
+.prose p,
+.prose-sm p {
+  margin-bottom: 0.75em !important;
+  margin-top: 0 !important;
+}
+
+.prose strong,
+.prose-sm strong {
+  font-weight: 700 !important;
+  color: inherit !important;
+}
+
+.prose em,
+.prose-sm em {
+  font-style: italic !important;
+}
+
+.prose code,
+.prose-sm code {
+  background-color: var(--muted) !important;
+  padding: 0.2em 0.4em !important;
+  border-radius: 0.25em !important;
+  font-size: 0.85em !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  color: inherit !important;
+}
+
+.prose pre,
+.prose-sm pre {
+  background-color: oklch(0.15 0 0) !important;
+  padding: 1em !important;
+  border-radius: 0.5em !important;
+  overflow-x: auto !important;
+  margin: 0.75em 0 !important;
+}
+
+.prose pre code,
+.prose-sm pre code {
+  background: none !important;
+  padding: 0 !important;
+  font-size: 0.875em !important;
+  color: oklch(0.9 0 0) !important;
+}
+
+.prose ul,
+.prose ol,
+.prose-sm ul,
+.prose-sm ol {
+  padding-left: 1.5em !important;
+  margin: 0.5em 0 !important;
+}
+
+.prose li,
+.prose-sm li {
+  margin: 0.25em 0 !important;
+}
+
+.prose ul,
+.prose-sm ul {
+  list-style-type: disc !important;
+}
+
+.prose ol,
+.prose-sm ol {
+  list-style-type: decimal !important;
+}
+
+.prose blockquote,
+.prose-sm blockquote {
+  border-left: 3px solid var(--primary) !important;
+  padding-left: 1em !important;
+  margin: 0.75em 0 !important;
+  font-style: italic !important;
+  opacity: 0.9 !important;
+}
+
+.prose a,
+.prose-sm a {
+  color: oklch(0.6 0.2 250) !important;
+  text-decoration: underline !important;
+}
+
+/* Dark mode prose adjustments */
+.dark .prose,
+.dark .prose-sm,
+.prose.dark\:prose-invert,
+.prose-sm.dark\:prose-invert {
+  color: oklch(0.9 0 0) !important;
+}
+
+.dark .prose code,
+.dark .prose-sm code {
+  background-color: oklch(0.25 0 0) !important;
+}
+
+/* Duck Mode Styles */
+
+/* 1. Background Wallpaper - Applied to HTML */
+/* Use URL encoded paths for spaces */
+html.duck.light {
+  background-image: url('/assets/wallpapers/duck%20light%20mode.png');
   background-size: cover;
   background-attachment: fixed;
+  background-position: center;
+}
+
+html.duck.dark {
+  background-image: url('/assets/wallpapers/duck%20dark%20mode.png');
+  background-size: cover;
+  background-attachment: fixed;
+  background-position: center;
 }
 
 /* Sunset Mode (Easter Egg) */
-.duck.sunset {
-  background-image: url('/assets/wallpapers/duck secret mode (sunset).png') !important;
+html.duck.sunset {
+  background-image: url('/assets/wallpapers/duck%20secret%20mode%20(sunset).png') !important;
   background-size: cover;
   background-attachment: fixed;
+  background-position: center;
 }
 
-/* Ensure content is readable over wallpapers */
-.duck .bg-background {
-  background-color: rgba(var(--background), 0.85);
-  /* Fallback */
-  background-color: color-mix(in srgb, var(--background), transparent 15%);
+/* 2. Transparent Body */
+html.duck body {
+  background-color: transparent !important;
+}
+
+/* 3. Content Readability - Tuned Opacities */
+/* Main background overlay - DRASTICALLY REDUCED OPACITY */
+html.duck .bg-background {
+  background-color: oklch(0.145 0 0 / 0.4) !important;
+  /* Reduced from 0.75 to 0.4 */
+  backdrop-filter: blur(8px);
+  /* Reduced blur */
+}
+
+html.duck.light .bg-background {
+  background-color: oklch(1 0 0 / 0.4) !important;
   backdrop-filter: blur(8px);
 }
 
-/* Dim Sidebar in Duck Mode */
-.duck aside {
-  background-color: rgba(var(--background), 0.6);
+/* Cards and panels */
+html.duck .bg-card,
+html.duck [class*="bg-card"] {
+  background-color: oklch(0.145 0 0 / 0.5) !important;
+  /* Reduced from 0.85 to 0.5 */
   backdrop-filter: blur(12px);
-  border-right: 1px solid rgba(var(--border), 0.2);
+}
+
+html.duck.light .bg-card,
+html.duck.light [class*="bg-card"] {
+  background-color: oklch(1 0 0 / 0.5) !important;
+  backdrop-filter: blur(12px);
+}
+
+/* Sidebar backgrounds */
+html.duck aside,
+html.duck [class*="border-r"] {
+  background-color: oklch(0.145 0 0 / 0.4) !important;
+  /* Reduced from 0.8 to 0.4 */
+  backdrop-filter: blur(12px);
+}
+
+html.duck.light aside,
+html.duck.light [class*="border-r"] {
+  background-color: oklch(1 0 0 / 0.4) !important;
+  backdrop-filter: blur(12px);
+}
+
+/* Header */
+html.duck header {
+  background-color: oklch(0.145 0 0 / 0.5) !important;
+  backdrop-filter: blur(12px);
+}
+
+html.duck.light header {
+  background-color: oklch(1 0 0 / 0.5) !important;
+  backdrop-filter: blur(12px);
+}
+
+/* Modals and popovers */
+html.duck [role="dialog"],
+html.duck [data-radix-popper-content-wrapper] {
+  backdrop-filter: blur(20px);
+  background-color: oklch(0.145 0 0 / 0.8) !important;
+  /* Keep modals readable */
+}
+
+html.duck.light [role="dialog"],
+html.duck.light [data-radix-popper-content-wrapper] {
+  background-color: oklch(1 0 0 / 0.8) !important;
+}
+
+/* 4. High Contrast Buttons & Switches */
+
+/* Ensure ALL buttons are fully opaque and visible */
+html.duck button {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Primary Buttons - Enforce High Contrast */
+html.duck .bg-primary {
+  background-color: #fbbf24 !important;
+  /* Duck Yellow/Orange */
+  color: #000000 !important;
+  border: 1px solid #d97706 !important;
+}
+
+html.duck.light .bg-primary {
+  background-color: #fbbf24 !important;
+  color: #000000 !important;
+  border: 1px solid #d97706 !important;
+}
+
+/* Specific fix for Recording Button (often red/destructive) */
+html.duck .bg-destructive,
+html.duck .text-destructive {
+  background-color: #ef4444 !important;
+  /* Bright Red */
+  color: #ffffff !important;
+}
+
+/* Specific fix for Chat Button (if it uses secondary or other variants) */
+html.duck .bg-secondary {
+  background-color: #fbbf24 !important;
+  /* Fallback to Duck Yellow */
+  color: #000000 !important;
+}
+
+/* Switches */
+html.duck [role="switch"][data-state="checked"] {
+  background-color: #22c55e !important;
+  /* Green for active */
+}
+
+html.duck [role="switch"][data-state="unchecked"] {
+  background-color: #94a3b8 !important;
+  /* Slate for inactive */
+}
+
+/* Chat/Right Sidebar Borders */
+html.duck .border-l {
+  background-color: oklch(0.145 0 0 / 0.4) !important;
+}
+
+html.duck.light .border-l {
+  background-color: oklch(1 0 0 / 0.4) !important;
 }

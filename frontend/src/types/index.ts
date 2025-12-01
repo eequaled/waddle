@@ -9,7 +9,7 @@ export interface Activity {
 
 export interface ContentBlock {
   id: string;
-  type: 'heading' | 'paragraph' | 'todo' | 'image' | 'code' | 'summary' | 'link' | 'app-memory';
+  type: 'heading' | 'paragraph' | 'todo' | 'image' | 'code' | 'summary' | 'link' | 'app-memory' | 'manual-note';
   content: string; // For app-memory, this might be JSON stringified data or we use a specific field
   data?: any; // Generic data field for complex blocks like app-memory
   checked?: boolean; // for todo
@@ -24,10 +24,21 @@ export interface BlockData {
   ocrText: string;
 }
 
+export interface ManualNote {
+  id: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Session {
   id: string;
   title: string;
+  customTitle?: string;        // User-edited title
   summary: string;
+  customSummary?: string;      // User-edited summary
+  originalSummary?: string;    // Preserved AI summary
+  manualNotes?: ManualNote[];  // User-added notes
   tags: string[];
   startTime: string;
   endTime: string;

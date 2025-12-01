@@ -9,7 +9,6 @@ import {
   Code,
   Video,
   Sheet,
-  Terminal,
   AppWindow
 } from 'lucide-react';
 
