@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ContentBlock as Block } from '../types';
-import { Type, Code, Image as ImageIcon, Link as LinkIcon, CheckSquare, Heading1 } from 'lucide-react';
+import { Type, Code, Link as LinkIcon, CheckSquare, Heading1 } from 'lucide-react';
 
 interface BlockEditorProps {
   blocks: Block[];

@@ -3,18 +3,40 @@ import { ActivityTimeline } from './components/ActivityTimeline';
 import { MainEditor } from './components/MainEditor';
 import { SearchModal } from './components/SearchModal';
 import { SettingsModal } from './components/SettingsModal';
+import { ChatInterface } from './components/ChatInterface';
+import { ArchiveView } from './components/ArchiveView';
+import { ContextualChat } from './components/ContextualChat';
+import { NotificationPanel, Notification } from './components/NotificationPanel';
+import { RelatedMemories } from './components/RelatedMemories';
+import { InsightsView } from './components/InsightsView';
 import { Toaster } from './components/ui/sonner';
-import { User, Settings, Bell, Play, Pause, Circle } from 'lucide-react';
+import { toast } from 'sonner';
+import { Settings, Circle } from 'lucide-react';
 import { Button } from './components/ui/button';
+import { Logo } from './components/Logo';
+import { ProfileMenu } from './components/ProfileMenu';
 import { api, transformToSession } from './services/api';
-import { Session } from './types';
+import { Session, BlockData } from './types';
 
 function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<'timeline' | 'chat' | 'archives' | 'insights'>('timeline');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+
+  // Contextual Chat State
+  const [isContextualChatOpen, setIsContextualChatOpen] = useState(false);
+  const [contextualChatSession, setContextualChatSession] = useState<Session | null>(null);
+  const [contextualChatBlock, setContextualChatBlock] = useState<BlockData | undefined>(undefined);
+
+  // Search highlighting state
+  const [searchHighlightQuery, setSearchHighlightQuery] = useState<string>('');
+  const [searchTargetBlockId, setSearchTargetBlockId] = useState<string | undefined>(undefined);
+
+  // Notifications state
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   // Theme State
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
@@ -65,12 +87,95 @@ function App() {
     api.getStatus().then(status => setIsPaused(status.paused)).catch(console.error);
   }, []);
 
+  // Fetch Notifications on Mount and periodically
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const notifs = await api.getNotifications();
+        setNotifications(notifs || []);
+      } catch (error) {
+        console.error('Failed to load notifications:', error);
+      }
+    };
+
+    loadNotifications();
+    // Poll for new notifications every 30 seconds
+    const interval = setInterval(loadNotifications, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Create notification when recording status changes
+  const prevPausedRef = React.useRef(isPaused);
+  useEffect(() => {
+    if (prevPausedRef.current !== isPaused) {
+      // Status changed, create notification
+      api.createNotification({
+        type: 'status',
+        title: isPaused ? 'Recording Paused' : 'Recording Resumed',
+        message: isPaused
+          ? 'Screen recording has been paused. Click to resume.'
+          : 'Screen recording is now active.',
+      }).then(() => {
+        // Refresh notifications
+        api.getNotifications().then(setNotifications).catch(console.error);
+      }).catch(console.error);
+    }
+    prevPausedRef.current = isPaused;
+  }, [isPaused]);
+
   const toggleStatus = async () => {
     try {
       const newStatus = await api.setStatus(!isPaused);
       setIsPaused(newStatus.paused);
     } catch (error) {
       console.error("Failed to toggle status:", error);
+    }
+  };
+
+  // Helper function to calculate app usage time and generate insights
+  const generateAppUsageInsights = async (loadedSessions: Session[]) => {
+    // Calculate total time per app across all sessions for today
+    const today = new Date().toISOString().split('T')[0];
+    const todaySessions = loadedSessions.filter(s => s.date === today);
+
+    const appUsageMap: Record<string, { totalSeconds: number; sessionRef: string }> = {};
+
+    todaySessions.forEach(session => {
+      session.content.forEach(block => {
+        if (block.type === 'app-memory' && block.data) {
+          const appName = block.data.appName || block.content;
+          const blocks = block.data.blocks || [];
+
+          // Estimate time from blocks (each block is roughly 30 seconds of activity)
+          const estimatedSeconds = blocks.length * 30;
+
+          if (!appUsageMap[appName]) {
+            appUsageMap[appName] = { totalSeconds: 0, sessionRef: session.id };
+          }
+          appUsageMap[appName].totalSeconds += estimatedSeconds;
+        }
+      });
+    });
+
+    // Generate insights for apps with > 2 hours usage (7200 seconds)
+    for (const [appName, usage] of Object.entries(appUsageMap)) {
+      if (usage.totalSeconds > 7200) {
+        const hours = Math.floor(usage.totalSeconds / 3600);
+        const minutes = Math.floor((usage.totalSeconds % 3600) / 60);
+        const timeSpent = `${hours}h ${minutes}m`;
+
+        try {
+          await api.createNotification({
+            type: 'insight',
+            title: 'Usage Insight',
+            message: `You spent ${timeSpent} on ${appName} today`,
+            sessionRef: usage.sessionRef,
+            metadata: { appName, timeSpent },
+          });
+        } catch (error) {
+          console.error('Failed to create insight notification:', error);
+        }
+      }
     }
   };
 
@@ -84,13 +189,50 @@ function App() {
         console.log('[DEBUG] Received dates:', dates);
 
         console.log('[DEBUG] Transforming sessions...');
-        const loadedSessions = await Promise.all(dates.map(date => transformToSession(date)));
+        // Load sessions individually so one failure doesn't break all
+        const sessionPromises = dates.map(async date => {
+          try {
+            return await transformToSession(date);
+          } catch (e) {
+            console.error(`[ERROR] Failed to load session ${date}:`, e);
+            return null;
+          }
+        });
+
+        const results = await Promise.all(sessionPromises);
+        const loadedSessions = results.filter((s): s is Session => s !== null);
         console.log('[DEBUG] Loaded sessions:', loadedSessions.length, loadedSessions);
 
         setSessions(loadedSessions);
         if (loadedSessions.length > 0) {
-          setSelectedSessionId(loadedSessions[0].id);
+          // Only set selected if not already set
+          setSelectedSessionId(prev => prev || loadedSessions[0].id);
           console.log('[DEBUG] Set initial session ID:', loadedSessions[0].id);
+
+          // Generate proactive insights based on app usage
+          generateAppUsageInsights(loadedSessions);
+        }
+
+        // Create AI processing complete notification for new sessions
+        if (loadedSessions.length > 0) {
+          const latestSession = loadedSessions[0];
+          const sessionDate = new Date(latestSession.date);
+          const now = new Date();
+          const hoursSinceSession = (now.getTime() - sessionDate.getTime()) / (1000 * 60 * 60);
+
+          // If session is from today and has content, notify about AI processing
+          if (hoursSinceSession < 24 && latestSession.content.length > 0) {
+            try {
+              await api.createNotification({
+                type: 'processing',
+                title: 'AI Processing Complete',
+                message: `Memory summary ready for ${latestSession.date}`,
+                sessionRef: latestSession.id,
+              });
+            } catch (error) {
+              console.error('Failed to create processing notification:', error);
+            }
+          }
         }
       } catch (error) {
         console.error("[ERROR] Failed to load sessions:", error);
@@ -100,6 +242,86 @@ function App() {
   }, []);
 
   const selectedSession = sessions.find(s => s.id === selectedSessionId) || null;
+
+  // Handle session update from edit mode
+  const handleSessionUpdate = async (updatedSession: Session) => {
+    try {
+      // Update local state immediately for responsiveness
+      setSessions(prev => prev.map(s =>
+        s.id === updatedSession.id ? updatedSession : s
+      ));
+
+      // Persist to backend
+      await api.updateSession(updatedSession.date, {
+        customTitle: updatedSession.customTitle,
+        customSummary: updatedSession.customSummary,
+        originalSummary: updatedSession.originalSummary,
+        manualNotes: updatedSession.manualNotes,
+      });
+
+      toast.success('Session saved successfully');
+    } catch (error) {
+      console.error('Failed to update session:', error);
+      toast.error('Failed to save session');
+    }
+  };
+
+  // Handle session delete
+  const handleSessionDelete = async (sessionId: string) => {
+    try {
+      const sessionToDelete = sessions.find(s => s.id === sessionId);
+      if (!sessionToDelete) return;
+
+      await api.deleteSession(sessionToDelete.date);
+
+      // Remove from local state
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+
+      // Select next available session
+      const remainingSessions = sessions.filter(s => s.id !== sessionId);
+      if (remainingSessions.length > 0) {
+        setSelectedSessionId(remainingSessions[0].id);
+      } else {
+        setSelectedSessionId(null);
+      }
+
+      toast.success('Session deleted');
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+      toast.error('Failed to delete session');
+    }
+  };
+
+  // Handle opening contextual chat
+  const handleOpenContextualChat = (session: Session, block?: BlockData) => {
+    setContextualChatSession(session);
+    setContextualChatBlock(block);
+    setIsContextualChatOpen(true);
+  };
+
+  // Handle closing contextual chat
+  const handleCloseContextualChat = () => {
+    setIsContextualChatOpen(false);
+    setContextualChatBlock(undefined);
+  };
+
+  // Handle marking notifications as read
+  const handleMarkNotificationsRead = async (ids: string[]) => {
+    try {
+      await api.markNotificationsRead(ids);
+      setNotifications(prev =>
+        prev.map(n => ids.includes(n.id) ? { ...n, read: true } : n)
+      );
+    } catch (error) {
+      console.error('Failed to mark notifications as read:', error);
+    }
+  };
+
+  // Handle notification navigation
+  const handleNotificationNavigate = (sessionId: string) => {
+    setActiveView('timeline');
+    setSelectedSessionId(sessionId);
+  };
 
   // Global Hotkey for Search (Cmd+K)
   useEffect(() => {
@@ -122,9 +344,7 @@ function App() {
         {/* Top Navigation Bar */}
         <header className="h-14 border-b border-border flex items-center justify-between px-4 bg-background shrink-0 z-10">
           <div className="flex items-center gap-4 w-1/3">
-            <div className="w-8 h-8 bg-primary rounded-md flex items-center justify-center text-primary-foreground font-bold text-lg">
-              M
-            </div>
+            <Logo className="h-10 w-10 text-foreground" />
             <div className="relative max-w-md w-full hidden md:block">
               <div
                 className="flex items-center px-3 py-1.5 rounded-md border border-input bg-muted/30 text-sm text-muted-foreground cursor-pointer hover:bg-accent/50 transition-colors"
@@ -156,9 +376,11 @@ function App() {
               )}
             </Button>
 
-            <Button variant="ghost" size="icon" className="text-muted-foreground">
-              <Bell size={18} />
-            </Button>
+            <NotificationPanel
+              notifications={notifications}
+              onMarkAsRead={handleMarkNotificationsRead}
+              onNavigateToSession={handleNotificationNavigate}
+            />
             <Button
               variant="ghost"
               size="icon"
@@ -167,9 +389,11 @@ function App() {
             >
               <Settings size={18} />
             </Button>
-            <div className="h-8 w-8 rounded-full bg-accent ml-2 flex items-center justify-center text-accent-foreground border border-border">
-              <User size={16} />
-            </div>
+            <ProfileMenu
+              activeView={activeView}
+              setActiveView={setActiveView}
+              setIsSettingsOpen={setIsSettingsOpen}
+            />
           </div>
         </header>
 
@@ -179,20 +403,60 @@ function App() {
             sessions={sessions}
             selectedSessionId={selectedSessionId}
             onSelectSession={setSelectedSessionId}
+            activeView={activeView}
+            onViewChange={setActiveView}
           />
 
-          <MainEditor
-            session={selectedSession}
-            onOpenSearch={() => setIsSearchOpen(true)}
-          />
+          {activeView === 'timeline' && (
+            <>
+              <MainEditor
+                session={selectedSession}
+                onOpenSearch={() => setIsSearchOpen(true)}
+                onSessionUpdate={handleSessionUpdate}
+                onSessionDelete={handleSessionDelete}
+                onOpenContextualChat={handleOpenContextualChat}
+                searchHighlightQuery={searchHighlightQuery}
+                searchTargetBlockId={searchTargetBlockId}
+              />
+              <RelatedMemories
+                currentSession={selectedSession}
+                allSessions={sessions}
+                onSelectSession={setSelectedSessionId}
+              />
+            </>
+          )}
+
+          {activeView === 'chat' && (
+            <ChatInterface allSessions={sessions} />
+          )}
+
+          {activeView === 'archives' && (
+            <ArchiveView />
+          )}
+
+          {activeView === 'insights' && (
+            <InsightsView sessions={sessions} />
+          )}
         </div>
 
         {/* Search Modal Overlay */}
         <SearchModal
           isOpen={isSearchOpen}
-          onClose={() => setIsSearchOpen(false)}
+          onClose={() => {
+            setIsSearchOpen(false);
+            // Clear highlight after a delay to allow viewing
+            setTimeout(() => {
+              setSearchHighlightQuery('');
+              setSearchTargetBlockId(undefined);
+            }, 5000);
+          }}
           sessions={sessions}
-          onSelectSession={setSelectedSessionId}
+          onSelectSession={(id, query, blockId) => {
+            setSelectedSessionId(id);
+            setSearchHighlightQuery(query || '');
+            setSearchTargetBlockId(blockId);
+          }}
+          onSetActiveView={setActiveView}
         />
 
         {/* Settings Modal Overlay */}
@@ -204,6 +468,16 @@ function App() {
           isDuckMode={isDuckMode}
           onDuckModeChange={setIsDuckMode}
         />
+
+        {/* Contextual Chat */}
+        {contextualChatSession && (
+          <ContextualChat
+            session={contextualChatSession}
+            initialBlock={contextualChatBlock}
+            isOpen={isContextualChatOpen}
+            onClose={handleCloseContextualChat}
+          />
+        )}
 
         <Toaster />
       </div>

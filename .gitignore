@@ -7,43 +7,86 @@
 *.test
 *.out
 go.work
+go.work.sum
 bin/
 build/
+vendor/
 
 # ===== Frontend (Node.js/Vite) =====
 node_modules/
 frontend/dist/
 frontend/.vite/
 *.log
-.env*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.env
+.env.local
+.env.*.local
 
 # ===== IDE & Editors =====
 .vscode/
-!.vscode/extensions.json
-!.vscode/settings.json
 .idea/
 .vs/
 .cursor/
 .windsurf/
+.kiro/
 .history/
 *.suo
 *.sw?
+*.swo
+*.swn
+*~
 
 # ===== OS =====
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 desktop.ini
 
-# ===== Session Data =====
-sessions/
-*.session
-
-# ===== Misc =====
-coverage.out
+# ===== Testing =====
 coverage/
-.cache
+coverage.out
+*.lcov
+.nyc_output/
+testsprite_tests/
+
+# ===== Build Artifacts =====
+*.map
+.cache/
+.parcel-cache/
+.turbo/
 
 # ===== Project-Specific =====
+# Session data (user-specific runtime data)
+sessions/*
+!sessions/blacklist.txt
+
+# User-uploaded profile pictures (runtime data)
+profile pictures/
+
+# System directories
+%USERPROFILE%/
+
+# Python requirements file (not needed for Go/Node project)
+requirements.txt
+
+# Documentation artifacts (generated/temporary)
 frontend/MIGRATION_SUMMARY.md
 MCP_UTILIZATION.md
-frontend/public/assets/
+TESTSprite_SETUP.md
+handover_documentation.md.resolved
+
+# Frontend user-specific assets
+frontend/public/assets/sounds/
+frontend/public/assets/icons/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak

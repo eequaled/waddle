@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { ContentBlock } from '../types';
-import { CheckSquare } from 'lucide-react';
+import { CheckSquare, StickyNote } from 'lucide-react';
 import { ImageLightbox } from './ImageLightbox';
 import { AppMemoryCard } from './AppMemoryCard';
 
 interface BlockRendererProps {
   block: ContentBlock;
+  onAskAI?: (block: any) => void;
 }
 
-export const BlockRenderer: React.FC<BlockRendererProps> = ({ block }) => {
+export const BlockRenderer: React.FC<BlockRendererProps> = ({ block, onAskAI }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   if (block.type === 'summary') {
@@ -96,7 +97,24 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({ block }) => {
         latestScreenshot={block.data?.latestScreenshot}
         blocks={block.data?.blocks || []}
         timestamp={block.data?.timestamp}
+        onAskAI={onAskAI}
       />
+    );
+  }
+
+  if (block.type === 'manual-note') {
+    return (
+      <div className="mb-4 p-4 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+        <div className="flex items-start gap-2">
+          <StickyNote size={16} className="text-yellow-500 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <div className="text-xs text-yellow-600 dark:text-yellow-400 mb-1">
+              Personal Note
+            </div>
+            <p className="text-foreground whitespace-pre-wrap">{block.content}</p>
+          </div>
+        </div>
+      </div>
     );
   }
 

@@ -57,7 +57,136 @@ export const api = {
         });
         if (!response.ok) throw new Error('Failed to set blacklist');
         return response.json();
-    }
+    },
+
+    // Chat
+    chat: async (context: string, message: string, sessionId?: string) => {
+        const res = await fetch(`${API_BASE}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ context, message, sessionId }),
+        });
+        if (!res.ok) throw new Error('Chat failed');
+        return res.json();
+    },
+
+    getChatHistory: async () => {
+        const res = await fetch(`${API_BASE}/chat`);
+        if (!res.ok) throw new Error('Failed to fetch chat history');
+        return res.json();
+    },
+
+    // Archives
+    getArchives: async () => {
+        const res = await fetch(`${API_BASE}/archives`);
+        if (!res.ok) throw new Error('Failed to fetch archives');
+        return res.json();
+    },
+
+    createArchive: async (name: string) => {
+        const res = await fetch(`${API_BASE}/archives`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+        });
+        if (!res.ok) throw new Error('Failed to create archive');
+        return res.json();
+    },
+
+    moveToArchive: async (sessionId: string, targetGroup: string, appName?: string) => {
+        const res = await fetch(`${API_BASE}/archives/move`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, targetGroup, appName }),
+        });
+        if (!res.ok) throw new Error('Failed to move to archive');
+        return res.json();
+    },
+
+    // Session Update
+    updateSession: async (date: string, data: {
+        customTitle?: string;
+        customSummary?: string;
+        originalSummary?: string;
+        manualNotes?: Array<{ id: string; content: string; createdAt: string; updatedAt: string }>;
+    }) => {
+        const res = await fetch(`${API_BASE}/sessions/${date}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) throw new Error('Failed to update session');
+        return res.json();
+    },
+
+    // Session Delete
+    deleteSession: async (date: string) => {
+        const res = await fetch(`${API_BASE}/sessions/${date}`, {
+            method: 'DELETE',
+        });
+        if (!res.ok) throw new Error('Failed to delete session');
+        return res.json();
+    },
+
+    // Notifications
+    getNotifications: async () => {
+        const res = await fetch(`${API_BASE}/notifications`);
+        if (!res.ok) throw new Error('Failed to fetch notifications');
+        return res.json();
+    },
+
+    createNotification: async (notification: {
+        type: 'status' | 'insight' | 'processing';
+        title: string;
+        message: string;
+        sessionRef?: string;
+        metadata?: { appName?: string; timeSpent?: string };
+    }) => {
+        const res = await fetch(`${API_BASE}/notifications`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(notification),
+        });
+        if (!res.ok) throw new Error('Failed to create notification');
+        return res.json();
+    },
+
+    markNotificationsRead: async (ids: string[]) => {
+        const res = await fetch(`${API_BASE}/notifications/read`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids }),
+        });
+        if (!res.ok) throw new Error('Failed to mark notifications as read');
+        return res.json();
+    },
+
+    // Profile
+    getProfileImages: async (): Promise<string[]> => {
+        const res = await fetch(`${API_BASE}/profile/images`);
+        if (!res.ok) throw new Error('Failed to fetch profile images');
+        return res.json();
+    },
+
+    uploadProfileImage: async (file: File): Promise<{ filename: string; url: string }> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch(`${API_BASE}/profile/upload`, {
+            method: 'POST',
+            body: formData,
+        });
+        if (!res.ok) throw new Error('Failed to upload profile image');
+        return res.json();
+    },
+
+    deleteProfileImage: async (filename: string): Promise<void> => {
+        const res = await fetch(`${API_BASE}/profile/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename }),
+        });
+        if (!res.ok) throw new Error('Failed to delete profile image');
+    },
 };
 
 // Helper to transform backend data into the Session format expected by the UI

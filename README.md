@@ -1,275 +1,230 @@
-# Ideathon — Memory & Context Tracker
+# Comet — AI-Powered Second Brain for Developers
 
-## 1. Project Overview
-
-### Purpose
-A local-first memory tool that silently captures activity (focused windows, clipboard, and visible text), synthesizes sessions, and presents an intelligent editor to refine those into durable knowledge. Privacy-first and aligned with developer workflows.
-
-### Key Features
-- Passive window focus tracking with app/title metadata
-- Clipboard change monitoring
-- Visible text extraction from the active window via Windows UI Automation
-- UI with Activity Timeline, Editor scaffold, and Search overlay
-- Session rotation and saving to local files for auditability
-
-### Technologies
-- Frontend: React 19, Vite 7, Tailwind v4, TipTap, lucide icons
-- Backend: Go 1.21, Windows APIs (`user32.dll`, `kernel32.dll`), PowerShell UIAutomation
-- Storage: Local files (daily logs + session chunks)
-
-### System Requirements
-- OS: Windows (required for UI Automation and Win32 APIs)
-- Runtime: Go 1.21+, Node.js 18+, npm
-- Browser: Modern Chrome/Edge/Firefox; Safari to be validated for editor behaviors
-
-## 2. Current Implementation
-
-### Components & Modules
-- `frontend/src/components/SessionCard.jsx`: timeline items with app icons and tags
-- `frontend/src/components/SearchModal.jsx`: modal overlay with filters and mock results
-- `frontend/src/components/Editor.jsx`: TipTap-powered rich editor scaffold
-- `pkg/tracker/window.go`: foreground window detection via Win32 API
-- `pkg/content/clipboard.go`: clipboard monitoring
-- `pkg/content/automation.go` + `pkg/content/scripts/get_text.ps1`: text extraction from active window
-- `pkg/storage/file_manager.go`: daily append logger
-- `main.go`: orchestrates channels, session lifecycle, and saving
-
-### Architecture Diagram
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                             Frontend (UI)                           │
-│  React + Vite + Tailwind + TipTap                                   │
-│  ┌──────────────┐   ┌─────────────┐   ┌───────────────┐            │
-│  │ Activity     │   │ Search      │   │ Intelligent    │            │
-│  │ Timeline     │   │ Modal       │   │ Editor         │            │
-│  └──────────────┘   └─────────────┘   └───────────────┘            │
-└─────────────────────────────────────────────────────────────────────┘
-                      ▲                           │
-                      │                           ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                              Backend (Go)                           │
-│  tracker/window.go → Focus events                                   │
-│  content/clipboard.go → Clipboard events                             │
-│  automation.go + get_text.ps1 → Visible text extraction               │
-│  storage/file_manager.go → Daily logs + session chunks               │
-│  main.go → Event loop & session lifecycle                            │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Internal API
-- Focus events: `FocusEvent{ Timestamp, AppName, PID, Title }`
-- Clipboard events: `ClipboardEvent{ Timestamp, Content }`
-- `ExtractContext()` returns window text; invoked periodically in-session
-- Files: daily logs + `YYYY-MM-DD_HH-MM-SS_AppName.txt` per session chunk
-
-## 3. Future Development
-
-### Roadmap
-- Persist sessions and artifacts with a searchable index
-- AI summarization (local or opt-in remote)
-- Artifact capture for links/files/screenshots
-- Natural-language search with include/exclude app filters
-- Responsive UI polish (sidebar collapse, editor toolbars)
-
-### Known Limitations
-- Windows-only backend at present
-- Not all applications expose accessible text
-- Browser automation requires environment preparation
-
-### Proposed Enhancements
-- macOS/Linux trackers and platform abstractions
-- Code splitting to reduce initial bundle size (TipTap lazy load)
-- Background indexing worker and relevance
-
-## 4. Setup Instructions
-
-### Clone & Install
-```bash
-git clone <repository-url>
-cd ideathon
-```
-
-#### Frontend
-```bash
-cd frontend
-npm install
-npm run dev  # http://localhost:5173/
-
-# Production
-npm run build
-npm run preview  # http://localhost:4173/
-```
-
-#### Backend
-```bash
-go run .
-```
-
-### First Run
-- Start backend for monitoring
-- Open frontend to view timeline and editor
-- Logs and session files appear under `ideathon txt experiments`
-
-## 5. Contribution Guidelines
-
-### Code Style
-- Frontend: ESLint 9, Tailwind utility-first
-- Backend: idiomatic Go, clear concurrency handling
-
-### Testing
-- Frontend: lint, build, and preview must pass
-- Playwright tests recommended once environment is prepared
-- Backend: unit tests for storage/content; manual focus and extraction verification
-
-### Pull Requests
-- Branch per feature
-- Include tests and docs
-- Ensure lint/build succeed; document OS-specific behaviors
-
-## Troubleshooting
-- Tailwind v4 tokens must be declared in `frontend/src/index.css`
-- Install Playwright browsers with `npx playwright install` if using automation
-- Empty session files may occur for apps without accessible text
-
-## License
-MIT
-
-A session tracking application that monitors your active windows, captures context, and provides an intelligent interface for reviewing and summarizing your activities.
+A local-first memory tool that silently captures your activity (focused windows, clipboard, and visible text), synthesizes sessions, and presents an intelligent interface to refine those into durable knowledge. Privacy-first and aligned with developer workflows.
 
 ## Features
 
-- **Passive Window Tracking**: Monitors active windows and applications
-- **Context Extraction**: Captures text content from active windows using Windows UI Automation
-- **Session Management**: Automatically groups activities into 2-hour chunks
-- **Modern UI**: React-based interface with Activity Timeline, Intelligent Editor, and Search
-- **Dark Mode**: Premium dark theme with glassmorphism effects
+### Core Capture
+- **Passive Window Tracking**: Monitors active windows and applications every 500ms
+- **Context Extraction**: Captures text content via Windows UI Automation + OCR
+- **Clipboard Monitoring**: Tracks clipboard changes with timestamps
+- **Screenshot Capture**: Periodic screenshots with automatic OCR processing
+
+### Second Brain Enhancement
+- **Session Editing**: Edit titles, summaries, and add manual notes to curate memories
+- **Contextual AI Chat**: Chat with AI grounded in specific session context
+- **Enhanced Search**: Deep linking to specific sessions and memory blocks with text highlighting
+- **Proactive Notifications**: AI-generated insights about usage patterns
+- **Related Memories**: Automatic surfacing of similar past sessions
+- **Activity Insights**: Visualize daily/weekly app usage patterns
+
+### Smart Features
+- **Semantic Tagging**: Auto-categorize activities (coding, research, communication)
+- **Memory Linking**: Connect related sessions manually or via AI suggestions
+- **Privacy Controls**: Exclude apps, private mode, data retention settings
+- **Export**: Download sessions as Markdown files
+
+## Tech Stack
+
+### Frontend
+- **React 19** - UI framework with TypeScript for type safety
+- **Vite 7** - Lightning-fast build tool & dev server
+- **Tailwind CSS v4** - Utility-first styling
+- **Radix UI** - Accessible component primitives
+- **shadcn/ui** - Beautiful component library
+- **TipTap** - Rich text editor for session notes
+- **Vitest** - Unit testing framework
+- **fast-check** - Property-based testing for invariant verification
+
+### Backend
+- **Go 1.24** - High-performance backend
+- **Windows APIs** (user32.dll, kernel32.dll) - Native system integration
+- **PowerShell UI Automation** - Text extraction from UI elements
+- **Ollama** - Local AI integration (gemma2:2b model)
+
+### Storage
+- Local file system (daily logs + session chunks)
+- JSON-based notification storage
 
 ## Requirements
 
-### Backend (Go)
-- Go 1.20 or higher
-- Windows OS (for UI Automation)
+- **OS**: Windows 10/11 (required for UI Automation and Win32 APIs)
+- **Go**: 1.20+
+- **Node.js**: 18+
+- **Ollama**: For local AI features (optional)
 
-### Frontend (Node.js)
-- Node.js 18+ and npm
-- Dependencies listed in `frontend/package.json`:
-  - React 18+
-  - Vite 5+
-  - Tailwind CSS 4+
-  - TipTap (Rich text editor)
-  - Lucide React (Icons)
+## Quick Start
 
-## Installation
-
-### 1. Clone the Repository
-\`\`\`bash
+### 1. Clone & Install
+```bash
 git clone <repository-url>
 cd ideathon
-\`\`\`
+```
 
 ### 2. Backend Setup
-\`\`\`bash
-# Build the Go application
-go build -o ideathon.exe main.go
-\`\`\`
+```bash
+# Install Go dependencies
+go mod download
+
+# Build the application
+go build -o ideathon.exe
+
+# Run the tracker
+./ideathon.exe
+```
 
 ### 3. Frontend Setup
-\`\`\`bash
+```bash
 cd frontend
+
+# Install dependencies
 npm install
-\`\`\`
 
-## Running the Application
-
-### Start the Backend
-\`\`\`bash
-# From the root directory
-./ideathon.exe
-\`\`\`
-
-The tracker will:
-- Monitor active windows every 500ms
-- Capture clipboard changes
-- Extract window content every 10 seconds
-- Save session logs to `Documents/ideathon txt experiments/`
-
-### Start the Frontend (Development)
-\`\`\`bash
-cd frontend
+# Start dev server (http://localhost:5173)
 npm run dev
-\`\`\`
 
-Access the UI at: `http://localhost:5173/`
-
-### Build Frontend for Production
-\`\`\`bash
-cd frontend
+# Build for production
 npm run build
-\`\`\`
+
+# Preview production build
+npm run preview
+```
+
+The frontend expects the Go backend running on `http://localhost:8080`.
+
+### 4. Optional: Ollama Setup
+```bash
+# Install Ollama from https://ollama.ai
+ollama pull gemma2:2b
+```
 
 ## Project Structure
 
-\`\`\`
+```
 ideathon/
-├── main.go                 # Main application entry point
+├── main.go                    # Application entry point
 ├── pkg/
-│   ├── tracker/           # Window tracking logic
-│   │   └── window.go
-│   ├── content/           # Content extraction
-│   │   ├── automation.go  # Go wrapper for PowerShell
-│   │   ├── clipboard.go   # Clipboard monitoring
-│   │   └── scripts/
-│   │       └── get_text.ps1  # UI Automation script
-│   └── storage/           # Data persistence
-│       └── logger.go
-└── frontend/              # React UI
-    ├── src/
-    │   ├── App.jsx        # Main application
-    │   ├── components/    # UI components
-    │   └── lib/           # Utilities
-    └── package.json       # Node.js dependencies
-\`\`\`
+│   ├── ai/                    # Ollama AI client
+│   ├── capture/               # Screenshot capture
+│   ├── content/               # Clipboard & UI automation
+│   ├── ocr/                   # Text extraction from images
+│   ├── processing/            # Batch processing & memory management
+│   ├── server/                # HTTP API server
+│   ├── storage/               # File system operations
+│   └── tracker/               # Window focus tracking
+├── frontend/
+│   ├── src/
+│   │   ├── components/        # React components
+│   │   │   ├── ui/           # shadcn/ui primitives
+│   │   │   └── figma/        # Design system components
+│   │   ├── services/          # API client & utilities
+│   │   ├── hooks/             # Custom React hooks
+│   │   ├── types/             # TypeScript definitions
+│   │   ├── styles/            # Global CSS
+│   │   ├── data/              # Mock data for development
+│   │   └── test/              # Test files
+│   │       ├── unit/         # Unit tests
+│   │       └── *.property.test.ts  # Property-based tests
+│   ├── public/                # Static assets
+│   ├── index.html             # Entry HTML
+│   ├── package.json           # Frontend dependencies
+│   └── vite.config.js         # Vite configuration
+├── profile/                   # Default profile images
+└── sessions/                  # Session data storage
+```
 
-## Usage
+### Key Frontend Components
 
-### Keyboard Shortcuts
-- **Ctrl+S**: Open search modal
-- **Esc**: Close modal/dialog
+| Component | Description |
+|-----------|-------------|
+| `App.tsx` | Main application shell |
+| `MainEditor` | Session viewer with edit mode |
+| `ChatInterface` | Global AI chat |
+| `ContextualChat` | Session-specific AI chat |
+| `SearchModal` | Search with deep linking |
+| `NotificationPanel` | Notifications dropdown |
+| `ActivityTimeline` | Session list sidebar |
+| `InsightsView` | Usage analytics |
+| `RelatedMemories` | Similar sessions panel |
 
-### Session Management
-- Sessions are automatically saved when you switch windows
-- Sessions longer than 2 hours are split into chunks
-- Each session is saved as: `YYYY-MM-DD_HH-MM-SS_AppName.txt`
+## API Endpoints
 
-## Development
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/sessions` | List all session dates |
+| GET | `/api/sessions/{date}` | Get session details |
+| PUT | `/api/sessions/{date}` | Update session |
+| DELETE | `/api/sessions/{date}` | Delete session |
+| GET | `/api/notifications` | Get notifications |
+| POST | `/api/notifications` | Create notification |
+| POST | `/api/notifications/read` | Mark as read |
+| POST | `/api/chat` | Global AI chat |
+| POST | `/api/chat/contextual` | Session-specific AI chat |
+| GET | `/api/status` | Get recording status |
+| POST | `/api/status` | Toggle recording |
 
-### Backend Development
-The Go backend uses:
-- Windows API for window tracking
-- PowerShell for UI Automation
-- Goroutines for concurrent monitoring
+## Testing
 
-### Frontend Development
-The React frontend uses:
-- **Vite** for fast development
-- **Tailwind CSS** for styling
-- **TipTap** for rich text editing
-- **shadcn/ui** patterns for components
+### Frontend Tests
+```bash
+cd frontend
+
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run linting
+npm run lint
+```
+
+Frontend tests are organized into:
+- **Unit tests** (`test/unit/`) - Component behavior testing
+- **Property tests** (`test/*.property.test.ts`) - Invariant verification using fast-check
+
+Each property test validates a correctness property from the design specification.
+
+### Backend Tests
+```bash
+# Run Go tests
+go test ./...
+```
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl/Cmd + K` | Open search |
+| `Esc` | Close modal/panel |
+
+## Configuration
+
+### App Blacklist
+Edit `sessions/blacklist.txt` to exclude apps from capture (one app name per line).
+
+### Privacy Mode
+Toggle "Private Mode" in Settings to pause all capture.
+
+### Data Retention
+Configure retention period in Settings to auto-cleanup old sessions.
 
 ## Troubleshooting
 
-### "Unknown at rule @tailwind" warnings
-These are harmless - they're Tailwind-specific CSS directives that standard CSS linters don't recognize.
-
 ### Empty session files
-Some applications (games, custom UIs) may not expose text to Windows UI Automation. Standard apps like browsers, Word, Notepad, and VS Code work best.
+Some applications don't expose text to Windows UI Automation. Standard apps like browsers, VS Code, and Office work best.
+
+### Ollama not responding
+Ensure Ollama is running: `ollama serve`
 
 ### Build errors
-Make sure you have:
-- Go 1.20+ installed
-- Node.js 18+ installed
-- All dependencies installed (`go mod download` and `npm install`)
+```bash
+# Go dependencies
+go mod download
+
+# Frontend dependencies
+cd frontend && npm install
+```
 
 ## License
 
@@ -277,4 +232,8 @@ MIT
 
 ## Contributing
 
-Contributions welcome! Please open an issue or pull request.
+1. Fork the repository
+2. Create a feature branch
+3. Write tests for new functionality
+4. Ensure all tests pass
+5. Submit a pull request

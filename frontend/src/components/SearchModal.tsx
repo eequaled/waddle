@@ -2,18 +2,17 @@ import React, { useState, useMemo } from 'react';
 import {
     Dialog,
     DialogContent,
-    DialogHeader,
-    DialogTitle
 } from './ui/dialog';
 import { Input } from './ui/input';
-import { Button } from './ui/button';
 import {
     Search,
-    Calendar,
-    Filter,
     X,
     CheckCircle2,
-    MinusCircle
+    MinusCircle,
+    FileText,
+    Tag,
+    AlignLeft,
+    Eye
 } from 'lucide-react';
 import { AppIcon } from './AppIcon';
 import { AppType, Session } from '../types';
@@ -22,20 +21,123 @@ import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { ScrollArea } from './ui/scroll-area';
 
+export interface SearchResult {
+    session: Session;
+    matchField: 'title' | 'summary' | 'tags' | 'ocrText';
+    matchSnippet: string;
+    blockId?: string;
+}
+
 interface SearchModalProps {
     isOpen: boolean;
     onClose: () => void;
     sessions: Session[];
-    onSelectSession: (id: string) => void;
+    onSelectSession: (id: string, searchQuery?: string, blockId?: string) => void;
+    onSetActiveView?: (view: 'timeline' | 'chat' | 'archives') => void;
 }
 
-// Removed hardcoded APPS_LIST
+// Helper to get snippet around match
+function getMatchSnippet(text: string, query: string, contextLength: number = 40): string {
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    const index = lowerText.indexOf(lowerQuery);
+    
+    if (index === -1) return text.substring(0, contextLength * 2) + '...';
+    
+    const start = Math.max(0, index - contextLength);
+    const end = Math.min(text.length, index + query.length + contextLength);
+    
+    let snippet = '';
+    if (start > 0) snippet += '...';
+    snippet += text.substring(start, end);
+    if (end < text.length) snippet += '...';
+    
+    return snippet;
+}
+
+// Helper to find which field matched
+function findMatchField(session: Session, query: string): SearchResult | null {
+    const lowerQuery = query.toLowerCase();
+    
+    // Check title
+    const displayTitle = session.customTitle || session.title;
+    if (displayTitle.toLowerCase().includes(lowerQuery)) {
+        return {
+            session,
+            matchField: 'title',
+            matchSnippet: getMatchSnippet(displayTitle, query),
+        };
+    }
+
+    
+    // Check summary
+    const displaySummary = session.customSummary || session.summary;
+    if (displaySummary.toLowerCase().includes(lowerQuery)) {
+        return {
+            session,
+            matchField: 'summary',
+            matchSnippet: getMatchSnippet(displaySummary, query),
+        };
+    }
+    
+    // Check tags
+    const matchingTag = session.tags.find(t => t.toLowerCase().includes(lowerQuery));
+    if (matchingTag) {
+        return {
+            session,
+            matchField: 'tags',
+            matchSnippet: `#${matchingTag}`,
+        };
+    }
+    
+    // Check OCR text in memory blocks
+    for (const block of session.content) {
+        if (block.type === 'app-memory' && block.data?.blocks) {
+            for (const memBlock of block.data.blocks) {
+                if (memBlock.ocrText && memBlock.ocrText.toLowerCase().includes(lowerQuery)) {
+                    return {
+                        session,
+                        matchField: 'ocrText',
+                        matchSnippet: getMatchSnippet(memBlock.ocrText, query),
+                        blockId: memBlock.id,
+                    };
+                }
+                if (memBlock.microSummary && memBlock.microSummary.toLowerCase().includes(lowerQuery)) {
+                    return {
+                        session,
+                        matchField: 'ocrText',
+                        matchSnippet: getMatchSnippet(memBlock.microSummary, query),
+                        blockId: memBlock.id,
+                    };
+                }
+            }
+        }
+    }
+    
+    return null;
+}
+
+// Field icon mapping
+const fieldIcons = {
+    title: FileText,
+    summary: AlignLeft,
+    tags: Tag,
+    ocrText: Eye,
+};
+
+const fieldLabels = {
+    title: 'Title',
+    summary: 'Summary',
+    tags: 'Tag',
+    ocrText: 'Content',
+};
 
 export const SearchModal: React.FC<SearchModalProps> = ({
     isOpen,
     onClose,
     sessions,
-    onSelectSession
+    onSelectSession,
+    onSetActiveView,
 }) => {
     const [query, setQuery] = useState('');
     const [excludeMode, setExcludeMode] = useState(false);
@@ -59,45 +161,77 @@ export const SearchModal: React.FC<SearchModalProps> = ({
         }
     };
 
-    const filteredSessions = useMemo(() => {
-        return sessions.filter(session => {
-            // Text Search
-            const matchesText =
-                session.title.toLowerCase().includes(query.toLowerCase()) ||
-                session.summary.toLowerCase().includes(query.toLowerCase()) ||
-                session.tags.some(t => t.toLowerCase().includes(query.toLowerCase()));
 
-            if (!matchesText) return false;
+    const searchResults = useMemo((): SearchResult[] => {
+        if (!query.trim()) {
+            // No query - return all sessions with default match info
+            return sessions
+                .filter(session => {
+                    // Date Filter
+                    if (dateFilter !== 'All' && session.date !== dateFilter) return false;
 
+                    // App Filter
+                    if (selectedApps.length > 0) {
+                        const hasExcludedApp = selectedApps.some(app => session.apps.includes(app));
+                        if (excludeMode && hasExcludedApp) return false;
+                        if (!excludeMode && !hasExcludedApp) return false;
+                    }
+
+                    return true;
+                })
+                .map(session => ({
+                    session,
+                    matchField: 'title' as const,
+                    matchSnippet: session.customTitle || session.title,
+                }));
+        }
+
+        const results: SearchResult[] = [];
+        
+        for (const session of sessions) {
             // Date Filter
-            if (dateFilter !== 'All' && session.date !== dateFilter) return false;
+            if (dateFilter !== 'All' && session.date !== dateFilter) continue;
 
             // App Filter
             if (selectedApps.length > 0) {
-                const sessionHasApp = selectedApps.some(app => session.apps.includes(app));
-
-                if (excludeMode) {
-                    // If Exclude Mode is ON, we want sessions that DO NOT have the selected apps
-                    // Wait, the prompt says: "Result: The search returns activities where those apps were not active."
-                    // So if Slack is selected in Exclude mode, show sessions WITHOUT Slack.
-                    const hasExcludedApp = selectedApps.some(app => session.apps.includes(app));
-                    if (hasExcludedApp) return false;
-                } else {
-                    // Normal mode: Show sessions that HAVE at least one of the selected apps? 
-                    // Or MUST have ALL? Usually "Included Apps" means at least one or subset.
-                    // Let's go with "Contains at least one of the selected apps" for flexibility.
-                    if (!sessionHasApp) return false;
-                }
+                const hasExcludedApp = selectedApps.some(app => session.apps.includes(app));
+                if (excludeMode && hasExcludedApp) continue;
+                if (!excludeMode && !hasExcludedApp) continue;
             }
 
-            return true;
-        });
+            const match = findMatchField(session, query);
+            if (match) {
+                results.push(match);
+            }
+        }
+        
+        return results;
     }, [sessions, query, excludeMode, selectedApps, dateFilter]);
 
-    const handleSelect = (id: string) => {
-        onSelectSession(id);
+    const handleSelect = (result: SearchResult) => {
+        // Set view to timeline for deep linking
+        onSetActiveView?.('timeline');
+        // Pass the search query for highlighting and blockId for scrolling
+        onSelectSession(result.session.id, query, result.blockId);
         onClose();
     };
+
+    // Highlight matching text in snippet
+    const highlightMatch = (text: string, searchQuery: string) => {
+        if (!searchQuery.trim()) return text;
+        
+        const regex = new RegExp(`(${searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        const parts = text.split(regex);
+        
+        return parts.map((part, i) => 
+            regex.test(part) ? (
+                <mark key={i} className="bg-yellow-500/30 text-foreground rounded px-0.5">
+                    {part}
+                </mark>
+            ) : part
+        );
+    };
+
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -160,14 +294,14 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                                         key={app}
                                         onClick={() => toggleApp(app)}
                                         className={`
-                                flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border transition-all
-                                ${isSelected
+                                            flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border transition-all
+                                            ${isSelected
                                                 ? excludeMode
                                                     ? 'border-destructive/50 bg-destructive/10 text-destructive'
                                                     : 'border-primary/50 bg-primary/10 text-primary'
                                                 : 'border-transparent hover:bg-muted text-muted-foreground'
                                             }
-                            `}
+                                        `}
                                     >
                                         <AppIcon app={app} className="w-3.5 h-3.5" />
                                         <span>{app}</span>
@@ -181,49 +315,59 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                     </div>
                 </div>
 
+
                 <ScrollArea className="h-[400px] bg-background">
                     <div className="p-2">
-                        {filteredSessions.length === 0 ? (
+                        {searchResults.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-40 text-muted-foreground">
                                 <Search className="w-8 h-8 mb-2 opacity-20" />
                                 <p>No memories found matching your criteria.</p>
                             </div>
                         ) : (
                             <div className="space-y-1">
-                                {filteredSessions.map(session => (
-                                    <div
-                                        key={session.id}
-                                        onClick={() => handleSelect(session.id)}
-                                        className="group flex items-center gap-4 p-3 hover:bg-accent/50 rounded-lg cursor-pointer transition-colors"
-                                    >
-                                        <div className="flex flex-col items-center w-16 text-xs text-muted-foreground">
-                                            <span className="font-medium text-foreground">{session.date}</span>
-                                            <span>{session.startTime}</span>
-                                        </div>
+                                {searchResults.map(result => {
+                                    const FieldIcon = fieldIcons[result.matchField];
+                                    return (
+                                        <div
+                                            key={result.session.id}
+                                            onClick={() => handleSelect(result)}
+                                            className="group flex items-center gap-4 p-3 hover:bg-accent/50 rounded-lg cursor-pointer transition-colors"
+                                        >
+                                            <div className="flex flex-col items-center w-16 text-xs text-muted-foreground">
+                                                <span className="font-medium text-foreground">{result.session.date}</span>
+                                                <span>{result.session.startTime}</span>
+                                            </div>
 
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <h4 className="font-semibold text-sm group-hover:text-primary transition-colors">
-                                                    {session.title}
-                                                </h4>
-                                                {session.tags.slice(0, 2).map(tag => (
-                                                    <Badge key={tag} variant="outline" className="text-[10px] h-4 px-1 text-muted-foreground">
-                                                        {tag}
-                                                    </Badge>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <h4 className="font-semibold text-sm group-hover:text-primary transition-colors truncate">
+                                                        {result.session.customTitle || result.session.title}
+                                                    </h4>
+                                                    {query && (
+                                                        <Badge variant="secondary" className="text-[10px] h-4 px-1.5 gap-1 shrink-0">
+                                                            <FieldIcon size={10} />
+                                                            {fieldLabels[result.matchField]}
+                                                        </Badge>
+                                                    )}
+                                                    {result.session.tags.slice(0, 2).map(tag => (
+                                                        <Badge key={tag} variant="outline" className="text-[10px] h-4 px-1 text-muted-foreground">
+                                                            {tag}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                                <p className="text-xs text-muted-foreground line-clamp-1">
+                                                    {query ? highlightMatch(result.matchSnippet, query) : result.matchSnippet}
+                                                </p>
+                                            </div>
+
+                                            <div className="flex gap-1 opacity-50 group-hover:opacity-100 transition-opacity shrink-0">
+                                                {result.session.apps.slice(0, 3).map(app => (
+                                                    <AppIcon key={app} app={app} className="w-4 h-4" />
                                                 ))}
                                             </div>
-                                            <p className="text-xs text-muted-foreground line-clamp-1">
-                                                {session.summary}
-                                            </p>
                                         </div>
-
-                                        <div className="flex gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
-                                            {session.apps.slice(0, 3).map(app => (
-                                                <AppIcon key={app} app={app} className="w-4 h-4" />
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

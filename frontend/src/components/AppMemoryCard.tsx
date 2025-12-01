@@ -3,22 +3,25 @@ import { BlockData } from '../types';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './ui/accordion';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 import { AppIcon } from './AppIcon';
 import { ImageLightbox } from './ImageLightbox';
-import { Clock, FileText } from 'lucide-react';
+import { Clock, FileText, Sparkles } from 'lucide-react';
 
 interface AppMemoryCardProps {
     appName: string;
     latestScreenshot?: string;
     blocks: BlockData[];
     timestamp?: string;
+    onAskAI?: (block: BlockData) => void;
 }
 
 export const AppMemoryCard: React.FC<AppMemoryCardProps> = ({
     appName,
     latestScreenshot,
     blocks,
-    timestamp
+    timestamp,
+    onAskAI,
 }) => {
     const [lightboxOpen, setLightboxOpen] = useState(false);
 
@@ -109,9 +112,9 @@ export const AppMemoryCard: React.FC<AppMemoryCardProps> = ({
                         ) : (
                             <Accordion type="single" collapsible className="w-full space-y-2">
                                 {blocks.map((block) => (
-                                    <AccordionItem key={block.id} value={block.id} className="border border-border/60 rounded-lg bg-background px-3">
+                                    <AccordionItem key={block.id} value={block.id} className="border border-border/60 rounded-lg bg-background px-3 group/block">
                                         <AccordionTrigger className="hover:no-underline py-3">
-                                            <div className="flex items-center gap-3 text-left">
+                                            <div className="flex items-center gap-3 text-left flex-1">
                                                 <div className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
                                                     {block.startTime.split('T')[1]?.substring(0, 5) || block.startTime}
                                                 </div>
@@ -129,6 +132,20 @@ export const AppMemoryCard: React.FC<AppMemoryCardProps> = ({
                                                     <div className="text-xs text-muted-foreground/70 bg-muted/30 p-2 rounded border border-border/30 font-mono max-h-32 overflow-y-auto">
                                                         {block.ocrText}
                                                     </div>
+                                                )}
+                                                {onAskAI && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="gap-1.5 opacity-0 group-hover/block:opacity-100 transition-opacity"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onAskAI(block);
+                                                        }}
+                                                    >
+                                                        <Sparkles size={14} />
+                                                        Ask AI about this
+                                                    </Button>
                                                 )}
                                             </div>
                                         </AccordionContent>
