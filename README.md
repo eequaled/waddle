@@ -1,4 +1,4 @@
-# Waddle — AI-Powered Second Brain for Developers
+# Waddle — AI-Powered Second Brain for anyone
 
 A local-first memory tool that silently captures your activity (focused windows, clipboard, and visible text), synthesizes sessions, and presents an intelligent interface to refine those into durable knowledge. Privacy-first and aligned with developer workflows.
 
