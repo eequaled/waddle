@@ -1,1 +1,68 @@
+# Waddle (Ideathon) - Project Dependencies
+# ==========================================
+# This project uses Go (backend) and Node.js (frontend), not Python.
+# See REQUIREMENTS.md for full setup instructions.
 
+# ===================
+# SYSTEM REQUIREMENTS
+# ===================
+# OS: Windows 10/11 (required for Win32 APIs)
+# RAM: 4GB minimum, 8GB recommended
+# Storage: 500MB + session data
+
+# ===================
+# BACKEND (Go)
+# ===================
+# Go Version: 1.20+ (project uses 1.24)
+# Install: https://go.dev/dl/
+#
+# Go Dependencies (installed via: go mod download):
+# - github.com/atotto/clipboard v0.1.4
+# - github.com/kbinani/screenshot v0.0.0
+# - golang.org/x/sys v0.38.0
+
+# ===================
+# EXTERNAL TOOLS
+# ===================
+# Tesseract OCR (REQUIRED for text extraction)
+# Install: https://github.com/UB-Mannheim/tesseract/wiki
+# Location: C:\Program Files\Tesseract-OCR\
+#
+# Ollama (OPTIONAL for AI features)
+# Install: https://ollama.ai
+# Model: ollama pull gemma2:2b
+
+# ===================
+# FRONTEND (Node.js)
+# ===================
+# Node.js Version: 18+ LTS
+# Install: https://nodejs.org/
+#
+# Install dependencies: cd frontend && npm install
+#
+# Key packages:
+# - react@19.2.0
+# - vite@7.2.4
+# - tailwindcss@4.1.17
+# - @radix-ui/react-* (UI primitives)
+# - @tiptap/react@3.11.0 (rich text editor)
+# - recharts@2.15.2 (charts)
+# - vitest@4.0.14 (testing)
+# - fast-check@4.3.0 (property testing)
+
+# ===================
+# QUICK START
+# ===================
+# 1. Install Tesseract OCR
+# 2. go mod download && go build -o ideathon.exe
+# 3. cd frontend && npm install
+# 4. ./ideathon.exe (Terminal 1)
+# 5. cd frontend && npm run dev (Terminal 2)
+# 6. Open http://localhost:5173
+
+# ===================
+# PORTS
+# ===================
+# Backend API: http://localhost:8080
+# Frontend Dev: http://localhost:5173
+# Ollama (optional): http://localhost:11434
