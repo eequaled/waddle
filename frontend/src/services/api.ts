@@ -103,6 +103,13 @@ export const api = {
         return res.json();
     },
 
+    // Metadata
+    getSessionMetadata: async (date: string) => {
+        const res = await fetch(`${API_BASE}/sessions/${date}/metadata`);
+        if (!res.ok) return null;
+        return res.json();
+    },
+
     // Session Update
     updateSession: async (date: string, data: {
         customTitle?: string;
@@ -189,9 +196,52 @@ export const api = {
     },
 };
 
+// Helper to get lightweight session summary (for list view)
+// Does NOT fetch blocks or images, just apps list
+export const getSessionSummary = async (date: string): Promise<Session> => {
+    const [apps, metadata] = await Promise.all([
+        api.getAppsForDate(date),
+        api.getSessionMetadata(date)
+    ]);
+
+    // Create minimal activity list
+    const activities: Activity[] = apps.map(app => ({
+        id: `act-${app}`,
+        app: app,
+        description: `Used ${app}`,
+        timestamp: 'All Day'
+    }));
+
+    const session: Session = {
+        id: date,
+        title: `Session: ${date}`,
+        summary: `Recorded activity for ${apps.length} applications.`,
+        tags: ['recorded'],
+        startTime: '9:00 AM', // Placeholder
+        endTime: '5:00 PM',   // Placeholder
+        duration: '8h',       // Placeholder
+        apps: apps,
+        date: date,
+        activities: activities,
+        content: [] // Empty content for summary
+    };
+
+    if (metadata) {
+        if (metadata.customTitle) session.customTitle = metadata.customTitle;
+        if (metadata.customSummary) session.customSummary = metadata.customSummary;
+        // We don't need notes for the summary view
+    }
+
+    return session;
+};
+
 // Helper to transform backend data into the Session format expected by the UI
-export const transformToSession = async (date: string): Promise<Session> => {
-    const apps = await api.getAppsForDate(date);
+// Fetches EVERYTHING (expensive)
+export const getFullSession = async (date: string): Promise<Session> => {
+    const [apps, metadata] = await Promise.all([
+        api.getAppsForDate(date),
+        api.getSessionMetadata(date)
+    ]);
 
     const activities: Activity[] = [];
     const content: ContentBlock[] = [];
@@ -245,7 +295,7 @@ export const transformToSession = async (date: string): Promise<Session> => {
         }
     }
 
-    return {
+    const session: Session = {
         id: date,
         title: `Session: ${date}`,
         summary: `Recorded activity for ${apps.length} applications.`,
@@ -258,4 +308,13 @@ export const transformToSession = async (date: string): Promise<Session> => {
         activities: activities,
         content: content
     };
+
+    if (metadata) {
+        session.customTitle = metadata.customTitle;
+        session.customSummary = metadata.customSummary;
+        session.originalSummary = metadata.originalSummary;
+        session.manualNotes = metadata.manualNotes;
+    }
+
+    return session;
 };

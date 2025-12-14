@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"ideathon/pkg/ai"
 	"ideathon/pkg/capture"
@@ -13,22 +14,34 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 )
 
 func main() {
-	fmt.Println("Starting Session Tracker...")
+	// Parse Flags
+	dataDirFlag := flag.String("data-dir", "", "Path to data directory (default: ~/Documents/Waddle)")
+	portFlag := flag.String("port", "8080", "API Server port")
+	flag.Parse()
+
+	fmt.Println("Starting Waddle...")
 
 	// 1. Initialize Storage Root
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Printf("Error getting home directory: %v\n", err)
-		return
+	var sessionRootDir string
+	if *dataDirFlag != "" {
+		sessionRootDir = *dataDirFlag
+	} else {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Printf("Error getting home directory: %v\n", err)
+			return
+		}
+		// Default to ~/Documents/Waddle
+		sessionRootDir = filepath.Join(homeDir, "Documents", "Waddle", "sessions")
 	}
-	// Base directory for all sessions
-	sessionRootDir := filepath.Join(homeDir, "OneDrive", "Documents", "ideathon", "sessions")
+
 	if err := os.MkdirAll(sessionRootDir, 0755); err != nil {
 		fmt.Printf("Error creating session root directory: %v\n", err)
 		return
@@ -74,7 +87,7 @@ func main() {
 
 	// 4. Start API Server
 	isPaused := &atomic.Bool{}
-	apiServer := server.NewServer(sessionRootDir, "8080", isPaused)
+	apiServer := server.NewServer(sessionRootDir, *portFlag, isPaused)
 	apiServer.Start()
 
 	// 5. Start Monitoring
@@ -108,25 +121,52 @@ func main() {
 		return strings.TrimSpace(name)
 	}
 
-	// Helper to load blacklist
-	loadBlacklist := func() map[string]bool {
-		bl := make(map[string]bool)
+	// Blacklist Cache
+	var blacklistCache map[string]bool
+	var blacklistMutex sync.RWMutex
+	var lastBlacklistLoad time.Time
+
+	loadBlacklist := func() {
 		path := filepath.Join(sessionRootDir, "blacklist.txt")
-		content, err := os.ReadFile(path)
-		if err == nil {
-			lines := strings.Split(string(content), "\n")
-			for _, line := range lines {
-				trimmed := strings.TrimSpace(line)
-				if trimmed != "" {
-					bl[strings.ToLower(trimmed)] = true
+		info, err := os.Stat(path)
+
+		// Reload only if file modified or never loaded
+		if err == nil && (blacklistCache == nil || info.ModTime().After(lastBlacklistLoad)) {
+			content, err := os.ReadFile(path)
+			if err == nil {
+				newMap := make(map[string]bool)
+				lines := strings.Split(string(content), "\n")
+				for _, line := range lines {
+					trimmed := strings.TrimSpace(line)
+					if trimmed != "" {
+						newMap[strings.ToLower(trimmed)] = true
+					}
 				}
+				blacklistMutex.Lock()
+				blacklistCache = newMap
+				lastBlacklistLoad = info.ModTime()
+				blacklistMutex.Unlock()
+				fmt.Println("[DEBUG] Blacklist reloaded")
 			}
+		} else if os.IsNotExist(err) && blacklistCache == nil {
+			blacklistMutex.Lock()
+			blacklistCache = make(map[string]bool)
+			blacklistMutex.Unlock()
 		}
-		return bl
 	}
+
+	// Initial load
+	loadBlacklist()
+
+	// Ticker to reload blacklist (e.g., every 30 seconds)
+	blacklistTicker := time.NewTicker(30 * time.Second)
+	defer blacklistTicker.Stop()
 
 	for {
 		select {
+		case <-blacklistTicker.C:
+			loadBlacklist()
+
 		case focusEvent := <-focusChan:
 			fmt.Printf("[DEBUG] Focus Event: %s (%s)\n", focusEvent.AppName, focusEvent.Title)
 			// Check if paused
@@ -137,8 +177,11 @@ func main() {
 			}
 
 			// Check Blacklist
-			blacklist := loadBlacklist()
-			if blacklist[strings.ToLower(focusEvent.AppName)] {
+			blacklistMutex.RLock()
+			isBlacklisted := blacklistCache[strings.ToLower(focusEvent.AppName)]
+			blacklistMutex.RUnlock()
+
+			if isBlacklisted {
 				currentDir = ""
 				currentHandle = 0
 				continue
@@ -157,6 +200,7 @@ func main() {
 			}
 
 			currentDir = filepath.Join(sessionRootDir, dateStr, safeAppName)
+			// Don't create dir immediately on focus, wait, but simplest refactor is keep logic
 			if err := os.MkdirAll(currentDir, 0755); err != nil {
 				fmt.Printf("Error creating app directory: %v\n", err)
 				currentDir = ""

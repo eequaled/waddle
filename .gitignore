@@ -1,45 +1,11 @@
-# ===== Go =====
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.test
-*.out
-go.work
-go.work.sum
-bin/
-build/
+# ===========================
+# Project-Wide
+# ===========================
+# Dependencies
+node_modules/
 vendor/
 
-# ===== Frontend (Node.js/Vite) =====
-node_modules/
-frontend/dist/
-frontend/.vite/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-.env
-.env.local
-.env.*.local
-
-# ===== IDE & Editors =====
-.vscode/
-.idea/
-.vs/
-.cursor/
-.windsurf/
-.kiro/
-.history/
-*.suo
-*.sw?
-*.swo
-*.swn
-*~
-
-# ===== OS =====
+# OS-generated files
 .DS_Store
 .DS_Store?
 ._*
@@ -49,44 +15,113 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 
-# ===== Testing =====
+# IDE & Editor files
+.vscode/
+.idea/
+.vs/
+.cursor/
+.windsurf/
+.history/
+*.suo
+*.sln
+*.sw?
+*.swo
+*.swn
+*~
+*.bak
+*.tmp
+*.temp
+
+# ===========================
+# Go Backend
+# ===========================
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Build artifacts
+main
+ideathon
+waddle
+waddle-backend
+waddle-backend.exe
+waddle.exe
+
+# Go workspace
+go.work
+go.work.sum
+
+# ===========================
+# Frontend (React/Vite)
+# ===========================
+# Build output
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Frontend Assets (Explicitly track these, but ignore temp files if any)
+# frontend/public/assets/sounds/ - Removed to ensure assets are tracked
+# frontend/public/assets/icons/ - Removed to ensure assets are tracked
+
+# ===========================
+# Electron
+# ===========================
+dist-electron/
+# electron/node_modules/ - Covered by root node_modules/
+
+# ===========================
+# Testing
+# ===========================
 coverage/
 coverage.out
 *.lcov
 .nyc_output/
 testsprite_tests/
 
-# ===== Build Artifacts =====
-*.map
-.cache/
-.parcel-cache/
-.turbo/
-
-# ===== Project-Specific =====
-# Session data (user-specific runtime data)
+# ===========================
+# Waddle Specific (User Data)
+# ===========================
+# Session storage (User privacy)
 sessions/*
+!sessions/.gitkeep
 !sessions/blacklist.txt
 
-# User-uploaded profile pictures (runtime data)
+# Profile images (User uploads)
+# Ignore all files in profile/ except defaults
+profile/*
+!profile/default_*.png
+!profile/.gitkeep
+
+# Misplaced user uploads
 profile pictures/
 
-# System directories
-%USERPROFILE%/
-
-# Python requirements file (not needed for Go/Node project)
-requirements.txt
-
-# Documentation artifacts (generated/temporary)
+# ===========================
+# Documentation / Temp
+# ===========================
+# Generated docs
 frontend/MIGRATION_SUMMARY.md
 MCP_UTILIZATION.md
 TESTSprite_SETUP.md
 handover_documentation.md.resolved
 
-# Frontend user-specific assets
-frontend/public/assets/sounds/
-frontend/public/assets/icons/
-
-# Temporary files
-*.tmp
-*.temp
-*.bak
+# Temporary build scripts/output
+electron_main_debug.txt
+electron_package_debug.txt
+/.kiro
+/.github
