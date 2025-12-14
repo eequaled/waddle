@@ -1,4 +1,4 @@
-# Waddle — AI-Powered Second Brain for anyone. (pre release)
+# Waddle — AI-Powered Second Brain
 
 A local-first memory tool that silently captures your activity (focused windows, clipboard, and visible text), synthesizes sessions, and presents an intelligent interface to refine those into durable knowledge. Privacy-first and aligned with developer workflows.
 
@@ -55,22 +55,22 @@ A local-first memory tool that silently captures your activity (focused windows,
 
 ## Quick Start
 
-### 1. Clone & Install
+### Option A: Use the Installer (Recommended)
+Download the latest `Waddle-x.x.x-Setup.exe` from [Releases](../../releases) and install.
+
+### Option B: Build from Source
+
+#### 1. Clone & Install
 ```bash
 git clone <repository-url>
 cd ideathon
 ```
 
-### 2. Backend Setup
+#### 2. Backend Setup
 ```bash
-# Install Go dependencies
 go mod download
-
-# Build the application
-go build -o ideathon.exe
-
-# Run the tracker
-./ideathon.exe
+go build -o waddle-backend.exe
+./waddle-backend.exe
 ```
 
 ### 3. Frontend Setup
@@ -99,36 +99,31 @@ ollama pull gemma2:2b
 ```
 
 ## Project Structure
-(old and inaccurate not gonna remake this)
+
 ```
-ideathon/
-├── main.go                    # Application entry point
-├── pkg/
+waddle/
+├── main.go                    # Go backend entry point
+├── pkg/                       # Backend packages
 │   ├── ai/                    # Ollama AI client
 │   ├── capture/               # Screenshot capture
 │   ├── content/               # Clipboard & UI automation
-│   ├── ocr/                   # Text extraction from images
-│   ├── processing/            # Batch processing & memory management
+│   ├── ocr/                   # Text extraction (Tesseract)
+│   ├── processing/            # Batch processing
 │   ├── server/                # HTTP API server
 │   ├── storage/               # File system operations
 │   └── tracker/               # Window focus tracking
-├── frontend/
+├── frontend/                  # React frontend
 │   ├── src/
 │   │   ├── components/        # React components
-│   │   │   ├── ui/           # shadcn/ui primitives
-│   │   │   └── figma/        # Design system components
-│   │   ├── services/          # API client & utilities
-│   │   ├── hooks/             # Custom React hooks
+│   │   ├── services/          # API client
 │   │   ├── types/             # TypeScript definitions
-│   │   ├── styles/            # Global CSS
-│   │   ├── data/              # Mock data for development
-│   │   └── test/              # Test files
-│   │       ├── unit/         # Unit tests
-│   │       └── *.property.test.ts  # Property-based tests
+│   │   └── test/              # Unit & property tests
 │   ├── public/                # Static assets
-│   ├── index.html             # Entry HTML
-│   ├── package.json           # Frontend dependencies
 │   └── vite.config.js         # Vite configuration
+├── electron/                  # Electron wrapper
+│   ├── main.js                # Electron main process
+│   ├── preload.js             # Preload scripts
+│   └── package.json           # Electron build config
 ├── profile/                   # Default profile images
 └── sessions/                  # Session data storage
 ```
