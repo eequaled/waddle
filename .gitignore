@@ -43,13 +43,11 @@ desktop.ini
 *.test
 *.out
 
-# Build artifacts
+# Named build artifacts
 main
 ideathon
 waddle
 waddle-backend
-waddle-backend.exe
-waddle.exe
 
 # Go workspace
 go.work
@@ -75,15 +73,12 @@ pnpm-debug.log*
 .env.local
 .env.*.local
 
-# Frontend Assets (Explicitly track these, but ignore temp files if any)
-# frontend/public/assets/sounds/ - Removed to ensure assets are tracked
-# frontend/public/assets/icons/ - Removed to ensure assets are tracked
-
 # ===========================
 # Electron
 # ===========================
 dist-electron/
-# electron/node_modules/ - Covered by root node_modules/
+out/
+release/
 
 # ===========================
 # Testing
@@ -95,33 +90,41 @@ coverage.out
 testsprite_tests/
 
 # ===========================
-# Waddle Specific (User Data)
+# OCR Binaries (Bundled)
 # ===========================
-# Session storage (User privacy)
+pkg/ocr/bin/
+
+# ===========================
+# User Data & Runtime
+# ===========================
+# Session storage
 sessions/*
 !sessions/.gitkeep
 !sessions/blacklist.txt
 
-# Profile images (User uploads)
-# Ignore all files in profile/ except defaults
+# Profile images (keep defaults)
 profile/*
 !profile/default_*.png
 !profile/.gitkeep
 
-# Misplaced user uploads
+# Archives (user-created collections)
+archives/
+
+# Chat history
+global_chats/
+*/chats/
+
+# Notifications
+notifications/
+
+# Misplaced uploads
 profile pictures/
 
 # ===========================
-# Documentation / Temp
+# Debug & Temp Files
 # ===========================
-# Generated docs
-frontend/MIGRATION_SUMMARY.md
-MCP_UTILIZATION.md
-TESTSprite_SETUP.md
-handover_documentation.md.resolved
-
-# Temporary build scripts/output
 electron_main_debug.txt
 electron_package_debug.txt
+main_electron.js
 /.kiro
 /.github
