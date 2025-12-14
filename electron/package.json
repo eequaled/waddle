@@ -1,0 +1,74 @@
+{
+  "name": "waddle",
+  "version": "1.0.0",
+  "description": "AI-Powered Second Brain - Capture, organize, and recall your digital memories",
+  "main": "main.js",
+  "author": "Waddle Team",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:portable": "electron-builder --win portable",
+    "pack": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.waddle.secondbrain",
+    "productName": "Waddle",
+    "copyright": "Copyright © 2025 Waddle",
+    "directories": {
+      "output": "../dist-electron"
+    },
+    "files": [
+      "main.js",
+      "preload.js"
+    ],
+    "extraResources": [
+      {
+        "from": "../waddle-backend.exe",
+        "to": "waddle-backend.exe"
+      },
+      {
+        "from": "../frontend/dist",
+        "to": "frontend/dist"
+      },
+      {
+        "from": "../profile",
+        "to": "profile"
+      },
+      {
+        "from": "C:/Program Files/Tesseract-OCR",
+        "to": "tesseract",
+        "filter": ["**/*", "!**/doc/**", "!**/*.html", "!**/ara.traineddata", "!**/equ.traineddata", "!**/osd.traineddata", "!**/*.jar"]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Waddle",
+      "license": "../LICENSE"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-Portable.${ext}"
+    }
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}

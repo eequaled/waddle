@@ -39,15 +39,31 @@ func ExtractText(imagePath string) (string, error) {
 }
 
 // findTesseract locates the tesseract executable
-// Checks: bundled bin, common install locations, PATH
+// Checks: bundled with Electron app, bundled bin, common install locations, PATH
 func findTesseract() string {
-	// 1. Check bundled location (for distribution)
+	// Get executable directory for bundled app detection
+	exePath, _ := os.Executable()
+	exeDir := filepath.Dir(exePath)
+
+	// 1. Check Electron bundled location (resources/tesseract)
+	electronBundled := filepath.Join(exeDir, "resources", "tesseract", "tesseract.exe")
+	if _, err := os.Stat(electronBundled); err == nil {
+		return electronBundled
+	}
+
+	// 2. Check relative to exe (for portable/dev)
+	relativeBundled := filepath.Join(exeDir, "tesseract", "tesseract.exe")
+	if _, err := os.Stat(relativeBundled); err == nil {
+		return relativeBundled
+	}
+
+	// 3. Check old bundled location (for distribution)
 	bundledPath := filepath.Join("pkg", "ocr", "bin", "tesseract.exe")
 	if _, err := os.Stat(bundledPath); err == nil {
 		return bundledPath
 	}
 
-	// 2. Check common install locations
+	// 4. Check common install locations
 	commonPaths := []string{
 		`C:\Program Files\Tesseract-OCR\tesseract.exe`,
 		`C:\Program Files (x86)\Tesseract-OCR\tesseract.exe`,
@@ -59,7 +75,7 @@ func findTesseract() string {
 		}
 	}
 
-	// 3. Check PATH
+	// 5. Check PATH
 	path, err := exec.LookPath("tesseract")
 	if err == nil {
 		return path

@@ -236,6 +236,27 @@ func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "metadata" {
+		// Get Session Metadata
+		date := parts[0]
+		metadataPath := filepath.Join(s.rootDir, date, "metadata.json")
+
+		content, err := os.ReadFile(metadataPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// Return empty/default metadata
+				json.NewEncoder(w).Encode(SessionMetadata{})
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(content)
+		return
+	}
+
 	if len(parts) >= 2 {
 		// Get App Details
 		date := parts[0]
@@ -542,20 +563,45 @@ func (s *Server) handleProfileUpload(w http.ResponseWriter, r *http.Request) {
 	// Limit upload size to 10MB
 	r.ParseMultipartForm(10 << 20)
 
-	file, handler, err := r.FormFile("file")
+	file, _, err := r.FormFile("file")
 	if err != nil {
 		http.Error(w, "Error retrieving file", http.StatusBadRequest)
 		return
 	}
 	defer file.Close()
 
+	// Read first 512 bytes to detect content type
+	buffer := make([]byte, 512)
+	_, err = file.Read(buffer)
+	if err != nil {
+		http.Error(w, "Error reading file", http.StatusInternalServerError)
+		return
+	}
+
+	contentType := http.DetectContentType(buffer)
+	if contentType != "image/jpeg" && contentType != "image/png" {
+		http.Error(w, "Invalid file type. Only JPEG and PNG are allowed.", http.StatusBadRequest)
+		return
+	}
+
+	// Seek back to start of file
+	if _, err := file.Seek(0, 0); err != nil {
+		http.Error(w, "Error processing file", http.StatusInternalServerError)
+		return
+	}
+
 	profileDir := filepath.Join(s.rootDir, "profile")
 	if _, err := os.Stat(profileDir); os.IsNotExist(err) {
 		os.Mkdir(profileDir, 0755)
 	}
 
-	// Create a safe filename
-	filename := fmt.Sprintf("upload-%d%s", time.Now().UnixNano(), filepath.Ext(handler.Filename))
+	// Create a safe filename (extension based on detected content type, not user input)
+	ext := ".png"
+	if contentType == "image/jpeg" {
+		ext = ".jpg"
+	}
+
+	filename := fmt.Sprintf("upload-%d%s", time.Now().UnixNano(), ext)
 	dstPath := filepath.Join(profileDir, filename)
 
 	dst, err := os.Create(dstPath)

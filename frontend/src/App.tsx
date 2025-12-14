@@ -15,7 +15,7 @@ import { Settings, Circle } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Logo } from './components/Logo';
 import { ProfileMenu } from './components/ProfileMenu';
-import { api, transformToSession } from './services/api';
+import { api, getSessionSummary, getFullSession } from './services/api';
 import { Session, BlockData } from './types';
 
 function App() {
@@ -188,52 +188,32 @@ function App() {
         const dates = await api.getSessions();
         console.log('[DEBUG] Received dates:', dates);
 
-        console.log('[DEBUG] Transforming sessions...');
+        console.log('[DEBUG] Loading session summaries (Lightweight)...');
         // Load sessions individually so one failure doesn't break all
         const sessionPromises = dates.map(async date => {
           try {
-            return await transformToSession(date);
+            return await getSessionSummary(date);
           } catch (e) {
-            console.error(`[ERROR] Failed to load session ${date}:`, e);
+            console.error(`[ERROR] Failed to load session summary ${date}:`, e);
             return null;
           }
         });
 
         const results = await Promise.all(sessionPromises);
         const loadedSessions = results.filter((s): s is Session => s !== null);
-        console.log('[DEBUG] Loaded sessions:', loadedSessions.length, loadedSessions);
+        console.log('[DEBUG] Loaded sessions:', loadedSessions.length);
 
         setSessions(loadedSessions);
         if (loadedSessions.length > 0) {
           // Only set selected if not already set
           setSelectedSessionId(prev => prev || loadedSessions[0].id);
-          console.log('[DEBUG] Set initial session ID:', loadedSessions[0].id);
 
           // Generate proactive insights based on app usage
-          generateAppUsageInsights(loadedSessions);
+          // NOTE: usage insights calculation might be inaccurate with lightweight sessions
+          // if it relies on 'blocks'. We might skip this or accept it only works after full load.
+          // generateAppUsageInsights(loadedSessions); 
         }
 
-        // Create AI processing complete notification for new sessions
-        if (loadedSessions.length > 0) {
-          const latestSession = loadedSessions[0];
-          const sessionDate = new Date(latestSession.date);
-          const now = new Date();
-          const hoursSinceSession = (now.getTime() - sessionDate.getTime()) / (1000 * 60 * 60);
-
-          // If session is from today and has content, notify about AI processing
-          if (hoursSinceSession < 24 && latestSession.content.length > 0) {
-            try {
-              await api.createNotification({
-                type: 'processing',
-                title: 'AI Processing Complete',
-                message: `Memory summary ready for ${latestSession.date}`,
-                sessionRef: latestSession.id,
-              });
-            } catch (error) {
-              console.error('Failed to create processing notification:', error);
-            }
-          }
-        }
       } catch (error) {
         console.error("[ERROR] Failed to load sessions:", error);
       }
@@ -242,6 +222,35 @@ function App() {
   }, []);
 
   const selectedSession = sessions.find(s => s.id === selectedSessionId) || null;
+
+  // Lazy load session content when selected
+  useEffect(() => {
+    const loadContent = async () => {
+      if (selectedSessionId && selectedSession) {
+        // If content is empty (and it's not a newly created empty manual session, which we assume has at least 1 block or we check a specific flag)
+        // For now, check if content length is 0, assuming valid sessions have at least summary
+        if (selectedSession.content.length === 0) {
+          console.log(`[DEBUG] Lazy loading content for ${selectedSessionId}...`);
+          try {
+            // Store current ID to avoid race conditions
+            const currentId = selectedSessionId;
+            const fullSession = await getFullSession(selectedSession.date);
+
+            // Update state only if we are still on the same session (optional, but good practice)
+            // Actually we want to update the cache regardless.
+            setSessions(prev => prev.map(s =>
+              s.id === currentId ? fullSession : s
+            ));
+          } catch (e) {
+            console.error(`[ERROR] Failed to lazy load session ${selectedSessionId}:`, e);
+          }
+        }
+      }
+    };
+    loadContent();
+  }, [selectedSessionId]);
+
+
 
   // Handle session update from edit mode
   const handleSessionUpdate = async (updatedSession: Session) => {
