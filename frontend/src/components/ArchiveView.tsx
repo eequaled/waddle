@@ -42,7 +42,7 @@ export function ArchiveView() {
     };
 
     return (
-        <div className="h-full flex flex-col bg-background text-foreground p-8">
+        <div className="h-full flex flex-col bg-background text-foreground p-8 overflow-y-auto">
             <div className="flex justify-between items-center mb-8">
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight">Archives</h2>
