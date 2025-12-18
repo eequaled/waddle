@@ -117,14 +117,15 @@ export const InsightsView: React.FC<InsightsViewProps> = ({ sessions }) => {
   const maxBlocks = Math.max(...dailyActivity.map(d => d.totalBlocks), 1);
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-background">
-      <div className="h-14 border-b border-border flex items-center px-6">
+    <div className="flex-1 flex flex-col h-full bg-background min-h-0">
+      <div className="h-14 border-b border-border flex items-center px-6 shrink-0">
         <BarChart3 className="w-5 h-5 text-primary mr-2" />
         <h2 className="font-semibold">Activity Insights</h2>
       </div>
 
-      <ScrollArea className="flex-1">
-        <div className="p-6 space-y-6 max-w-4xl mx-auto">
+      <div className="flex-1 min-h-0">
+        <ScrollArea className="h-full">
+          <div className="p-6 space-y-6 max-w-4xl mx-auto">
           {/* Quick Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card className="p-4">
@@ -252,7 +253,8 @@ export const InsightsView: React.FC<InsightsViewProps> = ({ sessions }) => {
             </div>
           </Card>
         </div>
-      </ScrollArea>
+        </ScrollArea>
+      </div>
     </div>
   );
 };
