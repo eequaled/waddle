@@ -164,6 +164,7 @@ func (sm *SessionManager) Search(query string, page, pageSize int) ([]SearchResu
 			SELECT 
 				s.id, s.date, s.custom_title, s.custom_summary, s.original_summary,
 				s.extracted_text_encrypted, s.created_at, s.updated_at,
+				s.entities_json, s.synthesis_status, s.ai_summary, s.ai_bullets,
 				fts.rank as score,
 				snippet(sessions_fts, 1, '<mark>', '</mark>', '...', 32) as snippet,
 				'session' as match_source
@@ -175,6 +176,7 @@ func (sm *SessionManager) Search(query string, page, pageSize int) ([]SearchResu
 			SELECT DISTINCT
 				s.id, s.date, s.custom_title, s.custom_summary, s.original_summary,
 				s.extracted_text_encrypted, s.created_at, s.updated_at,
+				s.entities_json, s.synthesis_status, s.ai_summary, s.ai_bullets,
 				fts.rank as score,
 				snippet(activity_blocks_fts, 0, '<mark>', '</mark>', '...', 32) as snippet,
 				'activity_block' as match_source
@@ -192,6 +194,7 @@ func (sm *SessionManager) Search(query string, page, pageSize int) ([]SearchResu
 		SELECT 
 			id, date, custom_title, custom_summary, original_summary,
 			extracted_text_encrypted, created_at, updated_at,
+			entities_json, synthesis_status, ai_summary, ai_bullets,
 			MAX(score) as best_score, snippet, match_source
 		FROM all_matches
 		GROUP BY id
@@ -219,6 +222,7 @@ func (sm *SessionManager) Search(query string, page, pageSize int) ([]SearchResu
 		err := rows.Scan(
 			&session.ID, &session.Date, &session.CustomTitle, &session.CustomSummary,
 			&session.OriginalSummary, &encryptedText, &session.CreatedAt, &session.UpdatedAt,
+			&session.EntitiesJSON, &session.SynthesisStatus, &session.AISummary, &session.AIBullets,
 			&score, &snippet, &matchSource,
 		)
 		if err != nil {
@@ -256,16 +260,29 @@ func (sm *SessionManager) Search(query string, page, pageSize int) ([]SearchResu
 // prepareFTSQuery escapes and prepares a query string for FTS5.
 // It handles boolean operators (AND, OR, NOT) and escapes special characters.
 func prepareFTSQuery(query string) string {
-	// For now, we'll do basic escaping and let FTS5 handle the query
-	// In a production system, you might want more sophisticated query parsing
+	// FTS5 special characters that need to be quoted: " * ( ) [ ] { } + - @ # : ; , . ! ? / \ | ~ ` ^ & % $ 
+	// For entity searches, we need to quote the entire query if it contains special characters
 	
-	// Remove potentially problematic characters but preserve basic boolean operators
-	// FTS5 supports: AND, OR, NOT, quotes for phrases, * for prefix matching
+	// Check if query contains FTS5 special characters that would cause syntax errors
+	specialChars := []string{"#", "@", "*", "(", ")", "[", "]", "{", "}", "+", "-", ":", ";", ",", ".", "!", "?", "/", "\\", "|", "~", "`", "^", "&", "%", "$"}
 	
-	// Simple approach: if the query contains quotes, preserve them for phrase search
-	// Otherwise, treat as individual terms with implicit AND
+	hasSpecialChars := false
+	for _, char := range specialChars {
+		if strings.Contains(query, char) {
+			hasSpecialChars = true
+			break
+		}
+	}
 	
-	return query // FTS5 is quite robust with query handling
+	// If query contains special characters, wrap it in double quotes for phrase search
+	if hasSpecialChars {
+		// Escape any existing double quotes in the query
+		escaped := strings.ReplaceAll(query, `"`, `""`)
+		return `"` + escaped + `"`
+	}
+	
+	// For regular queries without special characters, return as-is
+	return query
 }
 
 // SemanticSearch performs semantic search by generating embeddings and searching LanceDB,
@@ -312,7 +329,8 @@ func (sm *SessionManager) SemanticSearch(query string, topK int, dateRange *Date
 
 	baseSQL := `
 		SELECT id, date, custom_title, custom_summary, original_summary,
-		       extracted_text_encrypted, created_at, updated_at
+		       extracted_text_encrypted, created_at, updated_at,
+		       entities_json, synthesis_status, ai_summary, ai_bullets
 		FROM sessions
 		WHERE id IN (` + strings.Join(placeholders, ",") + `)`
 
@@ -350,6 +368,7 @@ func (sm *SessionManager) SemanticSearch(query string, topK int, dateRange *Date
 		err := rows.Scan(
 			&session.ID, &session.Date, &session.CustomTitle, &session.CustomSummary,
 			&session.OriginalSummary, &encryptedText, &session.CreatedAt, &session.UpdatedAt,
+			&session.EntitiesJSON, &session.SynthesisStatus, &session.AISummary, &session.AIBullets,
 		)
 		if err != nil {
 			return nil, NewStorageError(ErrDatabase, "failed to scan semantic search result", err)

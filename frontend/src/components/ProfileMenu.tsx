@@ -7,12 +7,12 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { User, Settings, Clock, MessageSquare, Archive, Sparkles, LogOut } from "lucide-react";
+import { User, Settings, Clock, MessageSquare, Archive, Sparkles, LogOut, Brain } from "lucide-react";
 import { ProfileImageCarousel } from './ProfileImageCarousel';
 
 interface ProfileMenuProps {
-    activeView: 'timeline' | 'chat' | 'archives' | 'insights';
-    setActiveView: (view: 'timeline' | 'chat' | 'archives' | 'insights') => void;
+    activeView: 'timeline' | 'chat' | 'archives' | 'insights' | 'knowledge';
+    setActiveView: (view: 'timeline' | 'chat' | 'archives' | 'insights' | 'knowledge') => void;
     setIsSettingsOpen: (isOpen: boolean) => void;
 }
 
@@ -86,6 +86,14 @@ export function ProfileMenu({ activeView, setActiveView, setIsSettingsOpen }: Pr
                     >
                         <Sparkles className="mr-2 h-4 w-4" />
                         <span>Insights</span>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                        className={`cursor-pointer ${activeView === 'knowledge' ? 'bg-accent' : ''}`}
+                        onClick={() => setActiveView('knowledge')}
+                    >
+                        <Brain className="mr-2 h-4 w-4" />
+                        <span>Knowledge Cards</span>
                     </DropdownMenuItem>
                 </div>
 

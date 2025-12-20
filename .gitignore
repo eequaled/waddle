@@ -1,130 +1,64 @@
-# ===========================
-# Project-Wide
-# ===========================
 # Dependencies
 node_modules/
 vendor/
 
-# OS-generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-desktop.ini
-
-# IDE & Editor files
-.vscode/
-.idea/
-.vs/
-.cursor/
-.windsurf/
-.history/
-*.suo
-*.sln
-*.sw?
-*.swo
-*.swn
-*~
-*.bak
-*.tmp
-*.temp
-
-# ===========================
-# Go Backend
-# ===========================
-# Binaries
+# Build artifacts
 *.exe
 *.dll
 *.so
 *.dylib
-*.test
 *.out
-
-# Named build artifacts
-main
-ideathon
-waddle
-waddle-backend
-
-# Go workspace
-go.work
-go.work.sum
-
-# ===========================
-# Frontend (React/Vite)
-# ===========================
-# Build output
-frontend/dist/
-frontend/dist-ssr/
-frontend/.vite/
-
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# Environment variables
-.env
-.env.local
-.env.*.local
-
-# ===========================
-# Electron
-# ===========================
+*.test
 dist-electron/
+frontend/dist/
 out/
 release/
 
-# ===========================
+# Go
+go.work
+go.work.sum
+.go-test-cache/
+
 # Testing
-# ===========================
 coverage/
 coverage.out
 *.lcov
 .nyc_output/
 testsprite_tests/
 
-# ===========================
-# OCR Binaries (Bundled)
-# ===========================
-pkg/ocr/bin/
+# Logs
+*.log
 
-# ===========================
-# User Data & Runtime
-# ===========================
-# Session storage
+# Environment
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+.vs/
+.cursor/
+.windsurf/
+.history/
+*.sw?
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Project-specific
+pkg/ocr/bin/
 sessions/*
 !sessions/.gitkeep
 !sessions/blacklist.txt
-
-# Profile images (keep defaults)
 profile/*
 !profile/default_*.png
 !profile/.gitkeep
-
-# Archives (user-created collections)
 archives/
-
-# Chat history
 global_chats/
 */chats/
-
-# Notifications
 notifications/
-
-# Misplaced uploads
-profile pictures/
-
-# ===========================
-# Debug & Temp Files
-# ===========================
-electron_main_debug.txt
-electron_package_debug.txt
-main_electron.js
 /.kiro
 /.github

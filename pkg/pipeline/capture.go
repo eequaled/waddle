@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"waddle/pkg/capture/uia"
+	"waddle/pkg/storage"
 	"waddle/pkg/tracker/etw"
 )
 
@@ -38,6 +39,7 @@ type ActivityBlock struct {
 type Pipeline struct {
 	etwConsumer    *etw.Consumer
 	uiaReader      *uia.Reader
+	storage        interface{} // Storage engine interface
 	ctx            context.Context
 	cancel         context.CancelFunc
 	activityBuffer chan *ActivityBlock
@@ -63,7 +65,7 @@ const (
 )
 
 // NewPipeline creates a new hybrid capture pipeline
-func NewPipeline() (*Pipeline, error) {
+func NewPipeline(storage interface{}) (*Pipeline, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	
 	// Create ETW consumer
@@ -83,6 +85,7 @@ func NewPipeline() (*Pipeline, error) {
 	p := &Pipeline{
 		etwConsumer:    etwConsumer,
 		uiaReader:      uiaReader,
+		storage:        storage,
 		ctx:            ctx,
 		cancel:         cancel,
 		activityBuffer: make(chan *ActivityBlock, ActivityBufferSize),
@@ -326,6 +329,37 @@ func (p *Pipeline) IsETWFallbackMode() bool {
 	return p.etwConsumer.IsFallbackMode()
 }
 
+// ProcessFocusEvent handles ETW focus event with backpressure
+func (p *Pipeline) ProcessFocusEvent(event etw.FocusEvent) error {
+	// Create session for today's date if it doesn't exist
+	dateStr := time.Now().Format("2006-01-02")
+	if storageEngine, ok := p.storage.(*storage.StorageEngine); ok {
+		go func(date string) {
+			if _, err := storageEngine.GetSession(date); err != nil {
+				if storage.IsNotFound(err) {
+					if _, err := storageEngine.CreateSession(date); err != nil {
+						fmt.Printf("Error creating session: %v\n", err)
+					}
+				}
+			}
+		}(dateStr)
+	}
+	
+	// Create activity block from ETW event
+	activity := &ActivityBlock{
+		Timestamp:     event.Timestamp,
+		WindowHandle:  event.WindowHandle,
+		ProcessID:     event.ProcessID,
+		ProcessName:   event.ProcessName,
+		CaptureSource: CaptureSourceETW,
+		Metadata:      make(map[string]interface{}),
+	}
+	
+	// Send to UIA processor with backpressure handling
+	p.sendActivityWithBackpressure(activity)
+	return nil
+}
+
 // Stop stops the capture pipeline and cleans up resources
 func (p *Pipeline) Stop() error {
 	p.mu.Lock()
@@ -374,6 +408,12 @@ func (p *Pipeline) GetActivityBuffer() <-chan *ActivityBlock {
 func (p *Pipeline) GetOCRBatchBuffer() <-chan *ActivityBlock {
 	return p.ocrBatchBuffer
 }
+
+// Close is an alias for Stop to match expected interface
+func (p *Pipeline) Close() error {
+	return p.Stop()
+}
+
 // hasValidStructuredData checks if window info contains valid structured data
 func (p *Pipeline) hasValidStructuredData(windowInfo *uia.WindowInfo) bool {
 	if windowInfo == nil {
