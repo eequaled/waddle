@@ -891,3 +891,103 @@ func TestPropertySemanticSearchDateFiltering(t *testing.T) {
 
 	properties.TestingRun(t)
 }
+
+// TestPropertySearchMatchesEntities is Property Test 14: Search Matches Entities
+// For any search query matching an entity value, the search results SHALL include 
+// sessions containing that entity.
+// **Validates: Requirements 6.5**
+func TestPropertySearchMatchesEntities(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "session_manager_entity_search_property_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	em := NewEncryptionManager()
+	if err := em.InitializeKey(); err != nil {
+		t.Fatalf("Failed to initialize encryption: %v", err)
+	}
+
+	sm := NewSessionManager(tempDir, em)
+	if err := sm.Initialize(); err != nil {
+		t.Fatalf("Failed to initialize session manager: %v", err)
+	}
+	defer sm.Close()
+
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 100
+	properties := gopter.NewProperties(parameters)
+
+	// Generator for entity values that match the patterns from requirements
+	genEntity := gen.OneConstOf("PROJ-123", "#feature", "@john", "https://example.com")
+
+	// Generator for session data with entities
+	genSessionWithEntity := gen.Struct(reflect.TypeOf(struct {
+		Date        string
+		Entity      string
+		CustomTitle string
+	}{}), map[string]gopter.Gen{
+		"Date":        GenDateString(),
+		"Entity":      genEntity,
+		"CustomTitle": gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 && len(s) < 50 }),
+	})
+
+	properties.Property("Search matches entities", prop.ForAll(
+		func(data struct {
+			Date        string
+			Entity      string
+			CustomTitle string
+		}) bool {
+			// Create entities JSON with the generated entity
+			entitiesJSON := fmt.Sprintf(`[{"value":"%s","type":"test","count":1}]`, data.Entity)
+
+			// Create session with entity in entities_json
+			session := Session{
+				Date:         data.Date,
+				CustomTitle:  data.CustomTitle,
+				EntitiesJSON: entitiesJSON,
+			}
+
+			// Create the session
+			err := sm.Create(&session)
+			if err != nil {
+				t.Logf("Failed to create session: %v", err)
+				return false
+			}
+
+			// Search for the entity value
+			results, err := sm.Search(data.Entity, 1, 10)
+			if err != nil {
+				t.Logf("Search failed: %v", err)
+				return false
+			}
+
+			// Property: Search results should include the session containing the entity
+			found := false
+			for _, result := range results {
+				if result.Session.ID == session.ID {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				t.Logf("Entity search for '%s' did not return session %d with entities_json: %s", 
+					data.Entity, session.ID, entitiesJSON)
+				return false
+			}
+
+			// Clean up - delete the session
+			err = sm.DeleteByID(session.ID)
+			if err != nil {
+				t.Logf("Failed to delete session: %v", err)
+				// Don't fail the test for cleanup issues
+			}
+
+			return true
+		},
+		genSessionWithEntity,
+	))
+
+	properties.TestingRun(t)
+}

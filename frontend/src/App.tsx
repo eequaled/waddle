@@ -9,6 +9,7 @@ import { ContextualChat } from './components/ContextualChat';
 import { NotificationPanel, Notification } from './components/NotificationPanel';
 import { RelatedMemories } from './components/RelatedMemories';
 import { InsightsView } from './components/InsightsView';
+import { KnowledgeCardsView } from './components/KnowledgeCardsView';
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import { Settings, Circle } from 'lucide-react';
@@ -21,7 +22,7 @@ import { Session, BlockData } from './types';
 function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'timeline' | 'chat' | 'archives' | 'insights'>('timeline');
+  const [activeView, setActiveView] = useState<'timeline' | 'chat' | 'archives' | 'insights' | 'knowledge'>('timeline');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -445,6 +446,15 @@ function App() {
 
           {activeView === 'insights' && (
             <InsightsView sessions={sessions} />
+          )}
+
+          {activeView === 'knowledge' && (
+            <KnowledgeCardsView 
+              onCardClick={(sessionId) => {
+                setActiveView('timeline');
+                setSelectedSessionId(sessionId);
+              }}
+            />
           )}
         </div>
 
