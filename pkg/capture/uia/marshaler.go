@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/go-ole/go-ole"
@@ -14,11 +16,12 @@ import (
 // All UI Automation calls must be marshaled to a dedicated STA thread
 type Marshaler struct {
 	requests  chan *staRequest
-	responses chan *staResponse
 	quit      chan struct{}
+	doneChan  chan struct{} // Signals STA thread shutdown complete
 	wg        sync.WaitGroup
 	mu        sync.RWMutex
 	running   bool
+	closed    atomic.Bool // Atomic flag to prevent Close() races
 }
 
 // staRequest represents a request to execute on the STA thread
@@ -80,9 +83,9 @@ const (
 // NewMarshaler creates a new UI Automation marshaler with dedicated STA thread
 func NewMarshaler() (*Marshaler, error) {
 	m := &Marshaler{
-		requests:  make(chan *staRequest, 100),
-		responses: make(chan *staResponse, 100),
-		quit:      make(chan struct{}),
+		requests: make(chan *staRequest, 100),
+		quit:     make(chan struct{}),
+		doneChan: make(chan struct{}), // Add done channel for graceful shutdown
 	}
 
 	// Start the dedicated STA thread
@@ -99,6 +102,10 @@ func NewMarshaler() (*Marshaler, error) {
 // staThread runs the dedicated STA thread for UI Automation COM calls
 func (m *Marshaler) staThread() {
 	defer m.wg.Done()
+	defer func() {
+		// Signal shutdown complete
+		close(m.doneChan)
+	}()
 
 	// Lock this goroutine to the OS thread for STA
 	runtime.LockOSThread()
@@ -107,13 +114,18 @@ func (m *Marshaler) staThread() {
 	// Initialize COM with apartment threading
 	err := ole.CoInitializeEx(0, COINIT_APARTMENTTHREADED|COINIT_DISABLE_OLE1DDE)
 	if err != nil {
-		// Send error response to any pending requests
-		select {
-		case req := <-m.requests:
-			req.response <- &staResponse{err: fmt.Errorf("COM initialization failed: %w", err)}
-		default:
+		// COM initialization failed - log and drain any pending requests
+		// Send error response to any pending requests before exiting
+		for {
+			select {
+			case req := <-m.requests:
+				req.response <- &staResponse{err: fmt.Errorf("COM initialization failed: %w", err)}
+			case <-m.quit:
+				return
+			default:
+				return
+			}
 		}
-		return
 	}
 	defer ole.CoUninitialize()
 
@@ -123,13 +135,35 @@ func (m *Marshaler) staThread() {
 		case req := <-m.requests:
 			m.handleSTARequest(req)
 		case <-m.quit:
+			// Drain remaining requests with error before exiting
+			m.drainPendingRequests()
+			return
+		}
+	}
+}
+
+// drainPendingRequests sends error responses to any remaining requests in the queue
+func (m *Marshaler) drainPendingRequests() {
+	for {
+		select {
+		case req := <-m.requests:
+			req.response <- &staResponse{err: fmt.Errorf("marshaler shutting down")}
+		default:
 			return
 		}
 	}
 }
 
 // handleSTARequest processes a UI Automation request on the STA thread
+// Includes panic recovery to prevent goroutine leaks
 func (m *Marshaler) handleSTARequest(req *staRequest) {
+	// Panic recovery - COM calls can panic
+	defer func() {
+		if r := recover(); r != nil {
+			req.response <- &staResponse{err: fmt.Errorf("UIA panic recovered: %v", r)}
+		}
+	}()
+
 	switch req.operation {
 	case "GetWindowInfo":
 		windowInfo, err := m.getWindowInfoSTA(req.hwnd)
@@ -371,6 +405,11 @@ func containsAny(text string, substrings []string) bool {
 
 // GetWindowInfo extracts window information using UI Automation (thread-safe)
 func (m *Marshaler) GetWindowInfo(hwnd uintptr) (*WindowInfo, error) {
+	// Check if marshaler is closed using atomic flag
+	if m.closed.Load() {
+		return nil, fmt.Errorf("marshaler is closed")
+	}
+
 	m.mu.RLock()
 	if !m.running {
 		m.mu.RUnlock()
@@ -378,7 +417,8 @@ func (m *Marshaler) GetWindowInfo(hwnd uintptr) (*WindowInfo, error) {
 	}
 	m.mu.RUnlock()
 
-	// Create request
+	// Create request with BUFFERED response channel (size 1) to prevent deadlock
+	// This is critical: if STA thread sends response before we read, it won't block
 	response := make(chan *staResponse, 1)
 	req := &staRequest{
 		operation: "GetWindowInfo",
@@ -386,28 +426,45 @@ func (m *Marshaler) GetWindowInfo(hwnd uintptr) (*WindowInfo, error) {
 		response:  response,
 	}
 
-	// Send request to STA thread
+	// Send request to STA thread with timeout
 	select {
 	case m.requests <- req:
-	default:
-		return nil, fmt.Errorf("request queue full")
+		// Request sent successfully
+	case <-m.doneChan:
+		// Marshaler is shutting down
+		return nil, fmt.Errorf("marshaler closed during request")
+	case <-time.After(5 * time.Second):
+		// Request queue full or blocked
+		return nil, fmt.Errorf("request queue full or timeout")
 	}
 
-	// Wait for response
-	resp := <-response
-	
-	// If UI Automation extraction failed, mark for OCR fallback
-	if resp.err != nil && resp.windowInfo != nil {
-		resp.windowInfo.Metadata["uia_failed"] = true
-		resp.windowInfo.Metadata["fallback_to_ocr"] = true
-		resp.windowInfo.Metadata["uia_error"] = resp.err.Error()
+	// Wait for response with timeout
+	select {
+	case resp := <-response:
+		// If UI Automation extraction failed, mark for OCR fallback
+		if resp.err != nil && resp.windowInfo != nil {
+			resp.windowInfo.Metadata["uia_failed"] = true
+			resp.windowInfo.Metadata["fallback_to_ocr"] = true
+			resp.windowInfo.Metadata["uia_error"] = resp.err.Error()
+		}
+		return resp.windowInfo, resp.err
+	case <-m.doneChan:
+		// Marshaler closed while waiting for response
+		return nil, fmt.Errorf("marshaler closed while waiting for response")
+	case <-time.After(10 * time.Second):
+		// Response timeout
+		return nil, fmt.Errorf("response timeout")
 	}
-	
-	return resp.windowInfo, resp.err
 }
 
 // Close stops the marshaler and cleans up resources
 func (m *Marshaler) Close() error {
+	// Use atomic flag to prevent double-close and race conditions
+	if m.closed.Swap(true) {
+		// Already closed
+		return nil
+	}
+
 	m.mu.Lock()
 	if !m.running {
 		m.mu.Unlock()
@@ -419,12 +476,19 @@ func (m *Marshaler) Close() error {
 	// Signal STA thread to quit
 	close(m.quit)
 
-	// Wait for STA thread to finish
+	// Wait for STA thread to finish with timeout
+	select {
+	case <-m.doneChan:
+		// STA thread finished gracefully
+	case <-time.After(5 * time.Second):
+		// Timeout waiting for STA thread - force continue
+	}
+
+	// Wait for WaitGroup
 	m.wg.Wait()
 
-	// Close channels
+	// Close request channel (safe now that STA thread is done)
 	close(m.requests)
-	close(m.responses)
 
 	return nil
 }
