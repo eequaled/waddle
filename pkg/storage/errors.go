@@ -24,6 +24,8 @@ const (
 	ErrNotFound
 	// ErrConflict indicates a conflict (e.g., duplicate key).
 	ErrConflict
+	// ErrNotImplemented indicates functionality not yet implemented.
+	ErrNotImplemented
 )
 
 // String returns a human-readable name for the error code.
@@ -43,6 +45,8 @@ func (c ErrorCode) String() string {
 		return "NOT_FOUND"
 	case ErrConflict:
 		return "CONFLICT"
+	case ErrNotImplemented:
+		return "NOT_IMPLEMENTED"
 	default:
 		return "UNKNOWN_ERROR"
 	}
