@@ -26,6 +26,10 @@ const (
 	ErrConflict
 	// ErrNotImplemented indicates functionality not yet implemented.
 	ErrNotImplemented
+	// ErrSerialization indicates JSON serialization/deserialization error.
+	ErrSerialization
+	// ErrMigration indicates a migration-specific error.
+	ErrMigration
 )
 
 // String returns a human-readable name for the error code.
@@ -47,6 +51,10 @@ func (c ErrorCode) String() string {
 		return "CONFLICT"
 	case ErrNotImplemented:
 		return "NOT_IMPLEMENTED"
+	case ErrSerialization:
+		return "SERIALIZATION_ERROR"
+	case ErrMigration:
+		return "MIGRATION_ERROR"
 	default:
 		return "UNKNOWN_ERROR"
 	}
