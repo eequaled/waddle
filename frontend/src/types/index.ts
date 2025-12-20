@@ -48,3 +48,18 @@ export interface Session {
   content: ContentBlock[];
   date: string;
 }
+
+export interface Entity {
+  value: string;
+  type: 'jira' | 'hashtag' | 'mention' | 'url';
+  count: number;
+}
+
+export interface KnowledgeCard {
+  sessionId: string;
+  title: string;
+  bullets: string[];  // Exactly 3 bullets
+  entities: Entity[];
+  timestamp: string;
+  status: 'pending' | 'processed' | 'failed';
+}

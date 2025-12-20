@@ -354,3 +354,162 @@ func TestAppSpecificExtraction(t *testing.T) {
 		})
 	}
 }
+
+
+// TestCloseDuringActiveRequest tests that Close() during an active request doesn't cause deadlock
+// This is a critical race condition test recommended by senior dev review
+func TestCloseDuringActiveRequest(t *testing.T) {
+	marshaler, err := NewMarshaler()
+	if err != nil {
+		t.Fatalf("Failed to create marshaler: %v", err)
+	}
+
+	// Start a request in a goroutine
+	requestDone := make(chan error, 1)
+	go func() {
+		_, err := marshaler.GetWindowInfo(12345)
+		requestDone <- err
+	}()
+
+	// Give the request a moment to be sent
+	time.Sleep(10 * time.Millisecond)
+
+	// Close the marshaler while request is in-flight
+	closeErr := marshaler.Close()
+	if closeErr != nil {
+		t.Errorf("Close() returned error: %v", closeErr)
+	}
+
+	// Wait for the request to complete (should not hang forever)
+	select {
+	case err := <-requestDone:
+		// Request completed - either with result or error, both are acceptable
+		t.Logf("Request completed with error: %v (expected during shutdown)", err)
+	case <-time.After(10 * time.Second):
+		t.Fatalf("DEADLOCK: Request did not complete after Close() - this is the race condition bug!")
+	}
+}
+
+// TestDoubleClose tests that calling Close() twice doesn't panic or cause issues
+func TestDoubleClose(t *testing.T) {
+	marshaler, err := NewMarshaler()
+	if err != nil {
+		t.Fatalf("Failed to create marshaler: %v", err)
+	}
+
+	// First close
+	err = marshaler.Close()
+	if err != nil {
+		t.Errorf("First Close() returned error: %v", err)
+	}
+
+	// Second close should be safe (no-op)
+	err = marshaler.Close()
+	if err != nil {
+		t.Errorf("Second Close() returned error: %v", err)
+	}
+}
+
+// TestRequestAfterClose tests that requests after Close() return error immediately
+func TestRequestAfterClose(t *testing.T) {
+	marshaler, err := NewMarshaler()
+	if err != nil {
+		t.Fatalf("Failed to create marshaler: %v", err)
+	}
+
+	// Close the marshaler
+	marshaler.Close()
+
+	// Try to make a request - should fail immediately
+	start := time.Now()
+	_, err = marshaler.GetWindowInfo(12345)
+	duration := time.Since(start)
+
+	if err == nil {
+		t.Errorf("Expected error when calling GetWindowInfo after Close()")
+	}
+
+	// Should fail quickly, not timeout
+	if duration > time.Second {
+		t.Errorf("Request after Close() took too long: %v (should fail immediately)", duration)
+	}
+}
+
+// TestConcurrentCloseAndRequests tests concurrent Close() and GetWindowInfo() calls
+func TestConcurrentCloseAndRequests(t *testing.T) {
+	for i := 0; i < 10; i++ { // Run multiple times to catch race conditions
+		marshaler, err := NewMarshaler()
+		if err != nil {
+			t.Fatalf("Failed to create marshaler: %v", err)
+		}
+
+		done := make(chan bool, 20)
+
+		// Start multiple request goroutines
+		for j := 0; j < 10; j++ {
+			go func(id int) {
+				defer func() { done <- true }()
+				_, _ = marshaler.GetWindowInfo(uintptr(id))
+			}(j)
+		}
+
+		// Start multiple close goroutines (only one should actually close)
+		for j := 0; j < 10; j++ {
+			go func() {
+				defer func() { done <- true }()
+				_ = marshaler.Close()
+			}()
+		}
+
+		// Wait for all goroutines with timeout
+		timeout := time.After(10 * time.Second)
+		for j := 0; j < 20; j++ {
+			select {
+			case <-done:
+				// Goroutine completed
+			case <-timeout:
+				t.Fatalf("Iteration %d: Timeout - possible deadlock in concurrent close/request", i)
+			}
+		}
+	}
+}
+
+// TestPanicRecovery tests that panics in UIA calls are recovered
+func TestPanicRecovery(t *testing.T) {
+	marshaler, err := NewMarshaler()
+	if err != nil {
+		t.Fatalf("Failed to create marshaler: %v", err)
+	}
+	defer marshaler.Close()
+
+	// Make multiple requests - if panic recovery fails, the STA thread would die
+	// and subsequent requests would hang
+	for i := 0; i < 5; i++ {
+		_, err := marshaler.GetWindowInfo(uintptr(i))
+		// Error is expected, but should not hang
+		if err != nil {
+			t.Logf("Request %d returned error (expected): %v", i, err)
+		}
+	}
+}
+
+// TestAtomicClosedFlag tests that the atomic closed flag works correctly
+func TestAtomicClosedFlag(t *testing.T) {
+	marshaler, err := NewMarshaler()
+	if err != nil {
+		t.Fatalf("Failed to create marshaler: %v", err)
+	}
+
+	// Initially not closed
+	if marshaler.closed.Load() {
+		t.Errorf("Marshaler should not be closed initially")
+	}
+
+	// Close it
+	marshaler.Close()
+
+	// Now should be closed
+	if !marshaler.closed.Load() {
+		t.Errorf("Marshaler should be closed after Close()")
+	}
+}

@@ -1,7 +1,6 @@
 package ocr
 
 import (
-	"os"
 	"testing"
 )
 

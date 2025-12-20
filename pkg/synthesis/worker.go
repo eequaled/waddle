@@ -1,183 +1,136 @@
 package synthesis
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
+	"waddle/pkg/ai"
 	"waddle/pkg/storage"
 )
 
-// StorageInterface defines the methods needed by the synthesis worker
-type StorageInterface interface {
-	GetPendingSessions() ([]storage.Session, error)
-	GetPendingSessionsCount() (int, error)
-	UpdateSessionSynthesis(sessionID int64, entitiesJSON, synthesisStatus, aiSummary, aiBullets string) error
+// Worker processes sessions sequentially for AI synthesis
+type Worker struct {
+	storage    *storage.StorageEngine
+	ollama     *ai.OllamaClient
+	extractor  *Extractor
+	processing atomic.Bool
+	pending    atomic.Int64
+	quit       chan struct{}
+	wg         sync.WaitGroup
 }
 
-// SynthesisWorker handles sequential processing of sessions for AI synthesis
-type SynthesisWorker struct {
-	storage    StorageInterface
-	extractor  *EntityExtractor
-	processing int32 // atomic flag for processing state
-}
-
-// NewSynthesisWorker creates a new synthesis worker
-func NewSynthesisWorker(storage StorageInterface) *SynthesisWorker {
-	return &SynthesisWorker{
-		storage:   storage,
-		extractor: NewEntityExtractor(),
+// NewWorker creates a new synthesis worker
+func NewWorker(storageEngine *storage.StorageEngine) *Worker {
+	return &Worker{
+		storage:   storageEngine,
+		ollama:    ai.NewOllamaClient("", "gemma2:2b"),
+		extractor: NewExtractor(),
+		quit:      make(chan struct{}),
 	}
 }
 
-// Start begins the synthesis worker processing loop
-func (w *SynthesisWorker) Start(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Second) // Check for pending sessions every 5 seconds
-	defer ticker.Stop()
+// Start begins background processing
+func (w *Worker) Start() error {
+	w.wg.Add(1)
+	go w.processLoop()
+	return nil
+}
+
+// Close stops the worker gracefully
+func (w *Worker) Close() error {
+	close(w.quit)
+	w.wg.Wait()
+	return nil
+}
+
+// PendingCount returns number of sessions awaiting synthesis
+func (w *Worker) PendingCount() int64 {
+	return w.pending.Load()
+}
+
+// processLoop runs the background processing
+func (w *Worker) processLoop() {
+	defer w.wg.Done()
 	
+	ticker := time.NewTicker(30 * time.Second) // Process every 30 seconds
+	defer ticker.Stop()
+
 	for {
 		select {
-		case <-ctx.Done():
+		case <-w.quit:
 			return
 		case <-ticker.C:
-			w.processPendingSessions(ctx)
+			if err := w.ProcessNext(); err != nil {
+				log.Printf("Synthesis processing error: %v", err)
+			}
 		}
 	}
 }
 
-// processPendingSessions processes all pending sessions in FIFO order
-func (w *SynthesisWorker) processPendingSessions(ctx context.Context) {
-	// Use atomic flag to ensure only one processing loop runs at a time
-	if !atomic.CompareAndSwapInt32(&w.processing, 0, 1) {
-		return // Already processing
+// ProcessNext processes the oldest pending session (FIFO)
+func (w *Worker) ProcessNext() error {
+	if !w.processing.CompareAndSwap(false, true) {
+		return nil // Already processing
 	}
-	defer atomic.StoreInt32(&w.processing, 0)
-	
-	// Get pending sessions ordered by created_at (FIFO)
-	sessions, err := w.storage.GetPendingSessions()
+	defer w.processing.Store(false)
+
+	// Get oldest pending session
+	sessions, _, err := w.storage.ListSessions(1, 100)
 	if err != nil {
-		log.Printf("Error getting pending sessions: %v", err)
-		return
+		return fmt.Errorf("failed to list sessions: %w", err)
 	}
-	
+
+	var pendingSession *storage.Session
 	for _, session := range sessions {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			w.processSession(session)
-		}
-	}
-}
-
-// processSession processes a single session for synthesis
-func (w *SynthesisWorker) processSession(session storage.Session) {
-	log.Printf("Processing session %d for synthesis", session.ID)
-	
-	// Extract entities from session content
-	entities := w.extractor.ExtractEntities(session.ExtractedText)
-	entitiesJSON, err := w.extractor.EntitiesToJSON(entities)
-	if err != nil {
-		log.Printf("Error converting entities to JSON for session %d: %v", session.ID, err)
-		w.markSessionFailed(session.ID, fmt.Sprintf("Entity extraction failed: %v", err))
-		return
-	}
-	
-	// Generate AI summary (mock implementation - would use Ollama in production)
-	aiSummary := w.generateAISummary(session.ExtractedText)
-	
-	// Generate 3-bullet summary
-	bullets := w.generate3BulletSummary(session.ExtractedText)
-	bulletsJSON, err := json.Marshal(bullets)
-	if err != nil {
-		log.Printf("Error converting bullets to JSON for session %d: %v", session.ID, err)
-		w.markSessionFailed(session.ID, fmt.Sprintf("Bullet formatting failed: %v", err))
-		return
-	}
-	
-	// Update session with synthesis results
-	err = w.storage.UpdateSessionSynthesis(session.ID, entitiesJSON, "completed", aiSummary, string(bulletsJSON))
-	if err != nil {
-		log.Printf("Error updating session synthesis for session %d: %v", session.ID, err)
-		w.markSessionFailed(session.ID, fmt.Sprintf("Database update failed: %v", err))
-		return
-	}
-	
-	log.Printf("Successfully processed session %d", session.ID)
-}
-
-// generateAISummary generates an AI summary for the session content
-func (w *SynthesisWorker) generateAISummary(content string) string {
-	// Mock implementation - in production this would call Ollama
-	if len(content) == 0 {
-		return "No content available for summary"
-	}
-	
-	// Simple extractive summary - take first 200 characters
-	summary := strings.TrimSpace(content)
-	if len(summary) > 200 {
-		summary = summary[:200] + "..."
-	}
-	
-	return fmt.Sprintf("AI Summary: %s", summary)
-}
-
-// generate3BulletSummary generates exactly 3 bullet points from the content
-func (w *SynthesisWorker) generate3BulletSummary(content string) []string {
-	// Mock implementation - in production this would use Ollama with specific prompt
-	if len(content) == 0 {
-		return []string{
-			"No content available",
-			"Session appears to be empty",
-			"Unable to generate meaningful bullets",
-		}
-	}
-	
-	// Simple heuristic: split content into sentences and take up to 3
-	sentences := strings.Split(content, ".")
-	var bullets []string
-	
-	for i, sentence := range sentences {
-		if i >= 3 {
+		// Check if synthesis is pending (assuming we add this field to Session)
+		if session.CustomSummary == "" && session.ExtractedText != "" {
+			pendingSession = &session
 			break
 		}
-		
-		sentence = strings.TrimSpace(sentence)
-		if len(sentence) > 0 {
-			// Limit bullet length
-			if len(sentence) > 100 {
-				sentence = sentence[:100] + "..."
-			}
-			bullets = append(bullets, sentence)
-		}
 	}
-	
-	// Ensure we always have exactly 3 bullets
-	for len(bullets) < 3 {
-		bullets = append(bullets, "Additional context needed")
-	}
-	
-	return bullets[:3] // Ensure exactly 3 bullets
-}
 
-// markSessionFailed marks a session as failed with error message
-func (w *SynthesisWorker) markSessionFailed(sessionID int64, errorMsg string) {
-	err := w.storage.UpdateSessionSynthesis(sessionID, "[]", "failed", errorMsg, "[]")
+	if pendingSession == nil {
+		w.pending.Store(0)
+		return nil // No pending sessions
+	}
+
+	// Generate 3-bullet summary
+	summary, err := w.generate3BulletSummary(pendingSession.ExtractedText)
 	if err != nil {
-		log.Printf("Error marking session %d as failed: %v", sessionID, err)
+		return fmt.Errorf("failed to generate summary: %w", err)
 	}
+
+	// Extract entities
+	entities := w.extractor.Extract(pendingSession.ExtractedText)
+	_ = entities // TODO: Store entities in session when schema is updated
+
+	// Update session with synthesis results
+	pendingSession.CustomSummary = summary
+	// Note: We'd need to add entities field to Session struct
+	
+	if err := w.storage.UpdateSession(pendingSession); err != nil {
+		return fmt.Errorf("failed to update session: %w", err)
+	}
+
+	log.Printf("Synthesized session: %s", pendingSession.Date)
+	return nil
 }
 
-// PendingCount returns the number of sessions pending synthesis
-func (w *SynthesisWorker) PendingCount() (int, error) {
-	return w.storage.GetPendingSessionsCount()
-}
+// generate3BulletSummary creates exactly 3 bullet points
+func (w *Worker) generate3BulletSummary(text string) (string, error) {
+	prompt := fmt.Sprintf(`Analyze this activity session and create exactly 3 bullet points summarizing what was accomplished:
 
-// IsProcessing returns true if the worker is currently processing sessions
-func (w *SynthesisWorker) IsProcessing() bool {
-	return atomic.LoadInt32(&w.processing) == 1
+%s
+
+Format your response as exactly 3 bullet points starting with "•". Be concise and factual.`, text)
+
+	summary, err := w.ollama.Summarize("Session", prompt)
+	if err != nil {
+		return "", err
+	}
+
+	return summary, nil
 }
