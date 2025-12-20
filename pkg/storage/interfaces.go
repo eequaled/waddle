@@ -68,9 +68,16 @@ type SessionManagerInterface interface {
 	// CRUD operations
 	Create(session *Session) error
 	Get(date string) (*Session, error)
+	GetByID(id int64) (*Session, error)
 	Update(session *Session) error
 	Delete(date string) error
+	DeleteByID(id int64) error
 	List(page, pageSize int) ([]Session, int, error) // Returns sessions and total count
+
+	// Synthesis operations
+	GetPendingSessions() ([]Session, error)
+	GetPendingSessionsCount() (int, error)
+	UpdateSessionSynthesis(sessionID int64, entitiesJSON, synthesisStatus, aiSummary, aiBullets string) error
 
 	// FTS5 Search
 	Search(query string, page, pageSize int) ([]SearchResult, error)
