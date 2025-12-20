@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -738,11 +737,6 @@ func BenchmarkVectorSearch(b *testing.B) {
 		_, _ = vm.Search(queryEmbedding, 10)
 	}
 }
-
-func init() {
-	fmt.Println("VectorManager tests initialized")
-}
-
 
 // TestPropertySemanticSearchOrdering is Property Test 4: Semantic Search Ordering
 // For any semantic search query with top-k parameter:
