@@ -287,3 +287,191 @@ func TestIndexesExist(t *testing.T) {
 		})
 	}
 }
+
+
+// TestFTS5Triggers tests that FTS5 triggers sync data correctly.
+func TestFTS5Triggers(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "waddle_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	em := NewEncryptionManager()
+	if err := em.InitializeKey(); err != nil {
+		t.Fatalf("Failed to initialize encryption: %v", err)
+	}
+
+	sm := NewSessionManager(tempDir, em)
+	if err := sm.Initialize(); err != nil {
+		t.Fatalf("Failed to initialize session manager: %v", err)
+	}
+	defer sm.Close()
+
+	t.Run("Insert trigger syncs to FTS", func(t *testing.T) {
+		// Insert a session
+		_, err := sm.db.Exec(`
+			INSERT INTO sessions (date, custom_title, custom_summary, original_summary)
+			VALUES ('2025-01-20', 'Test Title', 'Test Summary', 'Original Summary')
+		`)
+		if err != nil {
+			t.Fatalf("Failed to insert session: %v", err)
+		}
+
+		// Search in FTS table
+		var count int
+		err = sm.db.QueryRow(`
+			SELECT COUNT(*) FROM sessions_fts WHERE sessions_fts MATCH 'Test'
+		`).Scan(&count)
+		if err != nil {
+			t.Fatalf("Failed to search FTS: %v", err)
+		}
+
+		if count != 1 {
+			t.Errorf("Expected 1 FTS result, got %d", count)
+		}
+	})
+
+	t.Run("Update trigger syncs to FTS", func(t *testing.T) {
+		// Update the session
+		_, err := sm.db.Exec(`
+			UPDATE sessions SET custom_title = 'Updated Title' WHERE date = '2025-01-20'
+		`)
+		if err != nil {
+			t.Fatalf("Failed to update session: %v", err)
+		}
+
+		// Search for updated content
+		var count int
+		err = sm.db.QueryRow(`
+			SELECT COUNT(*) FROM sessions_fts WHERE sessions_fts MATCH 'Updated'
+		`).Scan(&count)
+		if err != nil {
+			t.Fatalf("Failed to search FTS: %v", err)
+		}
+
+		if count != 1 {
+			t.Errorf("Expected 1 FTS result for 'Updated', got %d", count)
+		}
+
+		// Old content should not be found
+		err = sm.db.QueryRow(`
+			SELECT COUNT(*) FROM sessions_fts WHERE sessions_fts MATCH '"Test Title"'
+		`).Scan(&count)
+		if err != nil {
+			t.Fatalf("Failed to search FTS: %v", err)
+		}
+
+		if count != 0 {
+			t.Errorf("Expected 0 FTS results for old title, got %d", count)
+		}
+	})
+
+	t.Run("Delete trigger removes from FTS", func(t *testing.T) {
+		// Delete the session
+		_, err := sm.db.Exec(`DELETE FROM sessions WHERE date = '2025-01-20'`)
+		if err != nil {
+			t.Fatalf("Failed to delete session: %v", err)
+		}
+
+		// Search should return no results
+		var count int
+		err = sm.db.QueryRow(`
+			SELECT COUNT(*) FROM sessions_fts WHERE sessions_fts MATCH 'Updated'
+		`).Scan(&count)
+		if err != nil {
+			t.Fatalf("Failed to search FTS: %v", err)
+		}
+
+		if count != 0 {
+			t.Errorf("Expected 0 FTS results after delete, got %d", count)
+		}
+	})
+
+	t.Run("Activity blocks FTS trigger works", func(t *testing.T) {
+		// Insert a session first
+		result, err := sm.db.Exec(`
+			INSERT INTO sessions (date, custom_title)
+			VALUES ('2025-01-21', 'Session for blocks')
+		`)
+		if err != nil {
+			t.Fatalf("Failed to insert session: %v", err)
+		}
+		sessionID, _ := result.LastInsertId()
+
+		// Insert an app_activity
+		result, err = sm.db.Exec(`
+			INSERT INTO app_activities (session_id, app_name)
+			VALUES (?, 'TestApp')
+		`, sessionID)
+		if err != nil {
+			t.Fatalf("Failed to insert app_activity: %v", err)
+		}
+		appActivityID, _ := result.LastInsertId()
+
+		// Insert an activity block
+		_, err = sm.db.Exec(`
+			INSERT INTO activity_blocks (app_activity_id, block_id, start_time, end_time, micro_summary)
+			VALUES (?, '15-30', '2025-01-21 15:30:00', '2025-01-21 15:45:00', 'Working on important project')
+		`, appActivityID)
+		if err != nil {
+			t.Fatalf("Failed to insert activity_block: %v", err)
+		}
+
+		// Search in FTS table
+		var count int
+		err = sm.db.QueryRow(`
+			SELECT COUNT(*) FROM activity_blocks_fts WHERE activity_blocks_fts MATCH 'important'
+		`).Scan(&count)
+		if err != nil {
+			t.Fatalf("Failed to search activity_blocks FTS: %v", err)
+		}
+
+		if count != 1 {
+			t.Errorf("Expected 1 FTS result for activity_blocks, got %d", count)
+		}
+	})
+}
+
+// TestTriggersExist tests that all FTS5 sync triggers are created.
+func TestTriggersExist(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "waddle_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	em := NewEncryptionManager()
+	if err := em.InitializeKey(); err != nil {
+		t.Fatalf("Failed to initialize encryption: %v", err)
+	}
+
+	sm := NewSessionManager(tempDir, em)
+	if err := sm.Initialize(); err != nil {
+		t.Fatalf("Failed to initialize session manager: %v", err)
+	}
+	defer sm.Close()
+
+	expectedTriggers := []string{
+		"sessions_ai",
+		"sessions_ad",
+		"sessions_au",
+		"activity_blocks_ai",
+		"activity_blocks_ad",
+		"activity_blocks_au",
+	}
+
+	for _, triggerName := range expectedTriggers {
+		t.Run("Trigger "+triggerName+" exists", func(t *testing.T) {
+			var name string
+			err := sm.db.QueryRow(`
+				SELECT name FROM sqlite_master 
+				WHERE type = 'trigger' AND name = ?
+			`, triggerName).Scan(&name)
+
+			if err != nil {
+				t.Errorf("Trigger %s does not exist: %v", triggerName, err)
+			}
+		})
+	}
+}
