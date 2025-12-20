@@ -254,26 +254,70 @@ func (pm *PerformanceMonitor) generateTestData(count int) error {
 			continue // Skip if session already exists
 		}
 
-		// Add some content
-		session.CustomTitle = fmt.Sprintf("Benchmark Session %d", i)
-		session.CustomSummary = fmt.Sprintf("This is a test session for benchmarking purposes. Session number %d.", i)
-		session.ExtractedText = fmt.Sprintf("Extracted text content for session %d with some searchable keywords.", i)
+		// Add realistic content with more text for better embeddings
+		session.CustomTitle = fmt.Sprintf("Benchmark Session %d - Working on Project Alpha", i)
+		session.CustomSummary = fmt.Sprintf("This is a comprehensive test session for benchmarking purposes. Session number %d involved extensive work on project development, code review, documentation writing, and team collaboration. The session included multiple applications and various activities throughout the day.", i)
+		session.ExtractedText = fmt.Sprintf("Extracted text content for session %d with searchable keywords like development, programming, testing, debugging, code review, documentation, meetings, collaboration, project management, software engineering, database design, API development, user interface, performance optimization, security analysis, and quality assurance.", i)
 
 		if err := pm.storageEngine.UpdateSession(session); err != nil {
 			continue
 		}
 
-		// Add activity blocks
-		for j := 0; j < 3; j++ {
+		// Generate embedding for the session
+		combinedText := session.CustomTitle + " " + session.CustomSummary + " " + session.ExtractedText
+		if pm.storageEngine.vectorMgr != nil {
+			embedding, err := pm.storageEngine.vectorMgr.GenerateEmbedding(combinedText)
+			if err != nil {
+				log.Printf("Warning: Failed to generate embedding for session %d: %v", i, err)
+			} else {
+				err = pm.storageEngine.vectorMgr.StoreEmbedding(session.ID, embedding)
+				if err != nil {
+					log.Printf("Warning: Failed to store embedding for session %d: %v", i, err)
+				}
+			}
+		}
+
+		// Add activity blocks with realistic OCR text
+		apps := []string{"VSCode", "Chrome", "Slack", "Terminal", "Figma", "Notion"}
+		for j := 0; j < 5; j++ { // More blocks per session
+			appName := apps[j%len(apps)]
 			block := &ActivityBlock{
 				BlockID:      fmt.Sprintf("%02d-%02d", 9+j, 30),
 				StartTime:    time.Now().Add(-time.Duration(j) * time.Hour),
 				EndTime:      time.Now().Add(-time.Duration(j) * time.Hour + 30*time.Minute),
-				OCRText:      fmt.Sprintf("OCR text for block %d in session %d", j, i),
-				MicroSummary: fmt.Sprintf("Summary for block %d", j),
+				OCRText:      fmt.Sprintf("OCR text for %s in session %d: function main() { console.log('debugging application'); const result = processData(input); return result; } // Code review comments: This function needs error handling and input validation. Consider adding try-catch blocks and parameter type checking.", appName, i),
+				MicroSummary: fmt.Sprintf("Working in %s - coding, debugging, and reviewing pull requests", appName),
 			}
 
-			pm.storageEngine.AddActivityBlock(date, "BenchmarkApp", block)
+			pm.storageEngine.AddActivityBlock(date, appName, block)
+		}
+
+		// Generate realistic screenshot files (500KB each)
+		screenshotData := make([]byte, 500*1024) // 500KB per screenshot
+		for k := 0; k < len(screenshotData); k++ {
+			screenshotData[k] = byte((i + k) % 256) // Pseudo-random but deterministic data
+		}
+
+		// Save multiple screenshots per session
+		for j := 0; j < 3; j++ {
+			filename := fmt.Sprintf("screenshot_%02d_%02d.png", j, (i*3+j)%100)
+			_, err := pm.storageEngine.SaveScreenshot(date, "VSCode", filename, screenshotData)
+			if err != nil {
+				log.Printf("Warning: Failed to save screenshot for session %d: %v", i, err)
+			}
+		}
+
+		// Progress indicator
+		if i%100 == 0 && i > 0 {
+			log.Printf("Generated %d/%d sessions...", i, count)
+		}
+	}
+
+	// Flush vector database to ensure embeddings are persisted
+	if pm.storageEngine.vectorMgr != nil {
+		log.Printf("Flushing vector database...")
+		if err := pm.storageEngine.vectorMgr.Flush(); err != nil {
+			log.Printf("Warning: Failed to flush vector database: %v", err)
 		}
 	}
 

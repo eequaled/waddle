@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"ideathon/pkg/ai"
+	"waddle/pkg/ai"
 )
 
 type ActivityBlock struct {

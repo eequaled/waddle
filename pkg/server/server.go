@@ -3,7 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"ideathon/pkg/storage"
+	"waddle/pkg/storage"
 	"io"
 	"net/http"
 	"os"

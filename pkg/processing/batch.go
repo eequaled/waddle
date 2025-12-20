@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"ideathon/pkg/ocr"
+	"waddle/pkg/ocr"
 )
 
 // BatchProcessor handles the background processing of screenshots

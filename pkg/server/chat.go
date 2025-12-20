@@ -3,8 +3,8 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"ideathon/pkg/ai"
-	"ideathon/pkg/storage"
+	"waddle/pkg/ai"
+	"waddle/pkg/storage"
 	"net/http"
 	"strings"
 	"time"
