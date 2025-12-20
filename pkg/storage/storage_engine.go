@@ -336,3 +336,19 @@ func (se *StorageEngine) HealthCheck() (*HealthStatus, error) {
 
 	return status, nil
 }
+// Synthesis operations
+
+// GetPendingSessions returns all sessions pending synthesis in FIFO order.
+func (se *StorageEngine) GetPendingSessions() ([]Session, error) {
+	return se.sessionMgr.GetPendingSessions()
+}
+
+// GetPendingSessionsCount returns the count of sessions pending synthesis.
+func (se *StorageEngine) GetPendingSessionsCount() (int, error) {
+	return se.sessionMgr.GetPendingSessionsCount()
+}
+
+// UpdateSessionSynthesis updates the synthesis-related fields of a session.
+func (se *StorageEngine) UpdateSessionSynthesis(sessionID int64, entitiesJSON, synthesisStatus, aiSummary, aiBullets string) error {
+	return se.sessionMgr.UpdateSessionSynthesis(sessionID, entitiesJSON, synthesisStatus, aiSummary, aiBullets)
+}

@@ -397,3 +397,109 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+// GetPendingSessions returns all sessions with synthesis_status = 'pending' ordered by created_at (FIFO)
+func (sm *SessionManager) GetPendingSessions() ([]Session, error) {
+	query := `
+		SELECT id, date, custom_title, custom_summary, original_summary, extracted_text_encrypted, 
+		       entities_json, synthesis_status, ai_summary, ai_bullets, created_at, updated_at
+		FROM sessions
+		WHERE synthesis_status = 'pending'
+		ORDER BY created_at ASC
+	`
+
+	rows, err := sm.db.Query(query)
+	if err != nil {
+		return nil, NewStorageError(ErrDatabase, "failed to get pending sessions", err)
+	}
+	defer rows.Close()
+
+	var sessions []Session
+	for rows.Next() {
+		var session Session
+		var encryptedText []byte
+		err := rows.Scan(
+			&session.ID,
+			&session.Date,
+			&session.CustomTitle,
+			&session.CustomSummary,
+			&session.OriginalSummary,
+			&encryptedText,
+			&session.EntitiesJSON,
+			&session.SynthesisStatus,
+			&session.AISummary,
+			&session.AIBullets,
+			&session.CreatedAt,
+			&session.UpdatedAt,
+		)
+		if err != nil {
+			return nil, NewStorageError(ErrDatabase, "failed to scan pending session", err)
+		}
+
+		// Decrypt sensitive fields
+		if len(encryptedText) > 0 && sm.encryptionMgr != nil {
+			decrypted, err := sm.encryptionMgr.Decrypt(encryptedText)
+			if err != nil {
+				return nil, NewStorageError(ErrEncryption, "failed to decrypt extracted text", err)
+			}
+			session.ExtractedText = string(decrypted)
+		}
+
+		sessions = append(sessions, session)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, NewStorageError(ErrDatabase, "error iterating pending sessions", err)
+	}
+
+	return sessions, nil
+}
+
+// GetPendingSessionsCount returns the count of sessions with synthesis_status = 'pending'
+func (sm *SessionManager) GetPendingSessionsCount() (int, error) {
+	query := "SELECT COUNT(*) FROM sessions WHERE synthesis_status = 'pending'"
+	
+	var count int
+	err := sm.db.QueryRow(query).Scan(&count)
+	if err != nil {
+		return 0, NewStorageError(ErrDatabase, "failed to count pending sessions", err)
+	}
+	
+	return count, nil
+}
+
+// UpdateSessionSynthesis updates only the synthesis-related columns of a session
+func (sm *SessionManager) UpdateSessionSynthesis(sessionID int64, entitiesJSON, synthesisStatus, aiSummary, aiBullets string) error {
+	query := `
+		UPDATE sessions
+		SET entities_json = ?, synthesis_status = ?, ai_summary = ?, ai_bullets = ?, updated_at = ?
+		WHERE id = ?
+	`
+
+	stmt, err := sm.getStmt(query)
+	if err != nil {
+		return NewStorageError(ErrDatabase, "failed to prepare statement", err)
+	}
+
+	result, err := stmt.Exec(
+		entitiesJSON,
+		synthesisStatus,
+		aiSummary,
+		aiBullets,
+		time.Now(),
+		sessionID,
+	)
+	if err != nil {
+		return NewStorageError(ErrDatabase, "failed to update session synthesis", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return NewStorageError(ErrDatabase, "failed to get rows affected", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrSessionNotFound
+	}
+
+	return nil
+}
