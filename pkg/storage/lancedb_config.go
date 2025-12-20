@@ -11,9 +11,9 @@ import (
 type LanceDBConfig struct {
 	// IVF_PQ Index Configuration
 	IndexType     string // "IVF_PQ" for optimized Windows performance
-	Partitions    int    // Number of IVF partitions (default: 50)
+	Partitions    int    // Number of IVF partitions (default: 100 for 50k vectors)
 	SubVectors    int    // Number of PQ sub-vectors (default: 16)
-	SearchNProbe  int    // Search nprobe parameter (default: 20)
+	SearchNProbe  int    // Search nprobe parameter (default: 10 for <20ms P99)
 	
 	// Vector Batching Configuration
 	BatchSize     int           // Vectors per batch (default: 100)
@@ -26,12 +26,14 @@ type LanceDBConfig struct {
 }
 
 // DefaultLanceDBConfig returns optimized configuration for Windows.
+// NOTE: Current implementation uses chromem-go for testing, which doesn't support
+// IVF_PQ indexing. These settings are prepared for future LanceDB integration.
 func DefaultLanceDBConfig() *LanceDBConfig {
 	return &LanceDBConfig{
 		IndexType:     "IVF_PQ",
-		Partitions:    50,  // Optimized for 50k-100k vectors
+		Partitions:    100, // Optimized: 500 vectors per partition for 50k vectors
 		SubVectors:    16,  // Balance between compression and accuracy
-		SearchNProbe:  20,  // Balance between speed and recall
+		SearchNProbe:  10,  // Optimized: scans 5,000 vectors vs 20,000 (target <20ms P99)
 		BatchSize:     100, // Batch 100 vectors for efficient I/O
 		BatchTimeout:  1 * time.Second,
 		MemoryMapped:  true,

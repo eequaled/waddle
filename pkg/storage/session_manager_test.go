@@ -115,9 +115,9 @@ func TestSchemaVersion(t *testing.T) {
 		t.Fatalf("Failed to get schema version: %v", err)
 	}
 
-	// Should be at version 2 (initial schema + FTS5)
-	if version != 2 {
-		t.Errorf("Expected schema version 2, got %d", version)
+	// Should be at version 3 (initial schema + FTS5 + synthesis/capture columns)
+	if version != 3 {
+		t.Errorf("Expected schema version 3, got %d", version)
 	}
 }
 
