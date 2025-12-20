@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -317,13 +318,13 @@ func (sm *SessionManager) SemanticSearch(query string, topK int, dateRange *Date
 
 	// Add date range filtering if provided
 	if dateRange != nil {
-		if !dateRange.StartDate.IsZero() {
+		if dateRange.StartDate != "" {
 			baseSQL += " AND date >= ?"
-			args = append(args, dateRange.StartDate.Format("2006-01-02"))
+			args = append(args, dateRange.StartDate)
 		}
-		if !dateRange.EndDate.IsZero() {
+		if dateRange.EndDate != "" {
 			baseSQL += " AND date <= ?"
-			args = append(args, dateRange.EndDate.Format("2006-01-02"))
+			args = append(args, dateRange.EndDate)
 		}
 	}
 
