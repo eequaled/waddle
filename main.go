@@ -3,14 +3,15 @@ package main
 import (
 	"flag"
 	"fmt"
-	"ideathon/pkg/ai"
-	"ideathon/pkg/capture"
-	"ideathon/pkg/content"
-	"ideathon/pkg/ocr"
-	"ideathon/pkg/processing"
-	"ideathon/pkg/server"
-	"ideathon/pkg/storage"
-	"ideathon/pkg/tracker"
+	"waddle/pkg/ai"
+	"waddle/pkg/capture"
+	"waddle/pkg/content"
+	"waddle/pkg/ocr"
+	"waddle/pkg/processing"
+	"waddle/pkg/server"
+	"waddle/pkg/storage"
+	"waddle/pkg/tracker"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -103,6 +104,17 @@ func main() {
 	defer storageEngine.Close()
 	
 	fmt.Printf("Storage engine initialized at: %s\n", storageDataDir)
+	
+	// Check Ollama availability for semantic search
+	if err := checkOllama(); err != nil {
+		fmt.Printf("⚠️  Ollama not available: %v\n", err)
+		fmt.Printf("   Semantic search will be disabled. To enable:\n")
+		fmt.Printf("   1. Install Ollama: https://ollama.ai\n")
+		fmt.Printf("   2. Run: ollama serve\n")
+		fmt.Printf("   3. Pull model: ollama pull nomic-embed-text\n")
+	} else {
+		fmt.Printf("✅ Ollama available - semantic search enabled\n")
+	}
 
 	// 5. Start API Server
 	isPaused := &atomic.Bool{}
@@ -295,4 +307,20 @@ func main() {
 			return
 		}
 	}
+}
+
+// checkOllama verifies if Ollama is available for semantic search.
+func checkOllama() error {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get("http://localhost:11434/api/tags")
+	if err != nil {
+		return fmt.Errorf("connection failed (run 'ollama serve')")
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("server error (status %d)", resp.StatusCode)
+	}
+	
+	return nil
 }

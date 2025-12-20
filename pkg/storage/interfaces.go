@@ -113,6 +113,7 @@ type VectorManagerInterface interface {
 
 	// Maintenance
 	Reindex(modelVersion string) error
+	Flush() error
 
 	// Lifecycle
 	Close() error

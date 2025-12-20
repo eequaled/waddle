@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"ideathon/pkg/storage"
+	"waddle/pkg/storage"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
