@@ -1,9 +1,15 @@
 package storage
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+
+	"github.com/leanovate/gopter"
+	"github.com/leanovate/gopter/gen"
+	"github.com/leanovate/gopter/prop"
 )
 
 // TestSessionManagerInitialization tests database initialization and schema creation.
@@ -474,4 +480,243 @@ func TestTriggersExist(t *testing.T) {
 			}
 		})
 	}
+}
+// TestPropertyFullTextSearchCoverage is Property Test 6: Full-Text Search Coverage
+// For any text stored in sessions or activity_blocks, searching for any word 
+// contained in that text SHALL return the containing record in results.
+func TestPropertyFullTextSearchCoverage(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "session_manager_fts_property_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	em := NewEncryptionManager()
+	if err := em.InitializeKey(); err != nil {
+		t.Fatalf("Failed to initialize encryption: %v", err)
+	}
+
+	sm := NewSessionManager(tempDir, em)
+	if err := sm.Initialize(); err != nil {
+		t.Fatalf("Failed to initialize session manager: %v", err)
+	}
+	defer sm.Close()
+
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 100
+	properties := gopter.NewProperties(parameters)
+
+	// Generator for simple searchable words
+	genWord := gen.OneConstOf("apple", "banana", "cherry", "dog", "elephant", "forest", "guitar", "house", "island", "jungle")
+
+	// Generator for session data with searchable content
+	genSessionData := gen.Struct(reflect.TypeOf(struct {
+		Date           string
+		CustomTitle    string
+		CustomSummary  string
+		OriginalSummary string
+	}{}), map[string]gopter.Gen{
+		"Date":            GenDateString(),
+		"CustomTitle":     genWord,
+		"CustomSummary":   genWord,
+		"OriginalSummary": genWord,
+	})
+
+	properties.Property("Full-text search finds containing records", prop.ForAll(
+		func(data struct {
+			Date           string
+			CustomTitle    string
+			CustomSummary  string
+			OriginalSummary string
+		}) bool {
+			// Create session with the generated data
+			session := Session{
+				Date:            data.Date,
+				CustomTitle:     data.CustomTitle,
+				CustomSummary:   data.CustomSummary,
+				OriginalSummary: data.OriginalSummary,
+			}
+
+			// Create the session
+			err := sm.Create(&session)
+			if err != nil {
+				t.Logf("Failed to create session: %v", err)
+				return false
+			}
+
+			// Test searching for the custom title
+			if session.CustomTitle != "" {
+				results, err := sm.Search(session.CustomTitle, 1, 10)
+				if err != nil {
+					t.Logf("Search failed for title '%s': %v", session.CustomTitle, err)
+					sm.Delete(session.Date) // Clean up
+					return false
+				}
+
+				// Should find the session
+				found := false
+				for _, result := range results {
+					if result.Session.Date == session.Date {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Logf("Search for title '%s' did not find session %s", session.CustomTitle, session.Date)
+					sm.Delete(session.Date) // Clean up
+					return false
+				}
+			}
+
+			// Test searching for the custom summary
+			if session.CustomSummary != "" && session.CustomSummary != session.CustomTitle {
+				results, err := sm.Search(session.CustomSummary, 1, 10)
+				if err != nil {
+					t.Logf("Search failed for summary '%s': %v", session.CustomSummary, err)
+					sm.Delete(session.Date) // Clean up
+					return false
+				}
+
+				// Should find the session
+				found := false
+				for _, result := range results {
+					if result.Session.Date == session.Date {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Logf("Search for summary '%s' did not find session %s", session.CustomSummary, session.Date)
+					sm.Delete(session.Date) // Clean up
+					return false
+				}
+			}
+
+			// Clean up - delete the session
+			sm.Delete(session.Date)
+
+			return true
+		},
+		genSessionData,
+	))
+
+	properties.TestingRun(t)
+}
+// TestPropertyFullTextSearchPagination is Property Test 7: Full-Text Search Pagination
+// For any full-text search with pagination parameters:
+// - Results on page N SHALL not overlap with results on page N-1 or N+1
+// - Result count per page SHALL be at most pageSize
+// - Total results across all pages SHALL equal the unpaginated result count
+func TestPropertyFullTextSearchPagination(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "session_manager_pagination_property_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	em := NewEncryptionManager()
+	if err := em.InitializeKey(); err != nil {
+		t.Fatalf("Failed to initialize encryption: %v", err)
+	}
+
+	sm := NewSessionManager(tempDir, em)
+	if err := sm.Initialize(); err != nil {
+		t.Fatalf("Failed to initialize session manager: %v", err)
+	}
+	defer sm.Close()
+
+	// Pre-populate with many sessions containing the same search term
+	searchTerm := "testword"
+	numSessions := 25 // Create enough sessions to test pagination
+	
+	for i := 0; i < numSessions; i++ {
+		session := Session{
+			Date:        fmt.Sprintf("2025-01-%02d", i+1),
+			CustomTitle: fmt.Sprintf("Session %d with %s", i, searchTerm),
+		}
+		err := sm.Create(&session)
+		if err != nil {
+			t.Fatalf("Failed to create session %d: %v", i, err)
+		}
+	}
+
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 100
+	properties := gopter.NewProperties(parameters)
+
+	// Generator for page size (1 to 10)
+	genPageSize := gen.IntRange(1, 10)
+
+	properties.Property("Full-text search pagination properties", prop.ForAll(
+		func(pageSize int) bool {
+			// Get all results without pagination to establish baseline
+			allResults, err := sm.Search(searchTerm, 1, 1000) // Large page size to get all
+			if err != nil {
+				t.Logf("Failed to get all results: %v", err)
+				return false
+			}
+
+			totalResults := len(allResults)
+			if totalResults == 0 {
+				t.Logf("No results found for search term")
+				return false
+			}
+
+			expectedPages := (totalResults + pageSize - 1) / pageSize // Ceiling division
+
+			var allPaginatedResults []SearchResult
+			seenSessionIDs := make(map[string]bool)
+
+			// Test each page
+			for page := 1; page <= expectedPages; page++ {
+				results, err := sm.Search(searchTerm, page, pageSize)
+				if err != nil {
+					t.Logf("Failed to search page %d: %v", page, err)
+					return false
+				}
+
+				// Property 1: Result count per page <= pageSize
+				if len(results) > pageSize {
+					t.Logf("Page %d has %d results, expected at most %d", page, len(results), pageSize)
+					return false
+				}
+
+				// Property 2: No overlapping results between pages
+				for _, result := range results {
+					if seenSessionIDs[result.Session.Date] {
+						t.Logf("Session %s appears on multiple pages", result.Session.Date)
+						return false
+					}
+					seenSessionIDs[result.Session.Date] = true
+				}
+
+				allPaginatedResults = append(allPaginatedResults, results...)
+
+				// Last page might have fewer results
+				if page < expectedPages && len(results) != pageSize {
+					t.Logf("Non-last page %d has %d results, expected %d", page, len(results), pageSize)
+					return false
+				}
+			}
+
+			// Property 3: Total paginated results equals unpaginated results
+			if len(allPaginatedResults) != totalResults {
+				t.Logf("Paginated results count %d != total results count %d", len(allPaginatedResults), totalResults)
+				return false
+			}
+
+			// Property 4: Results are in the same order (by score)
+			for i := 0; i < len(allResults) && i < len(allPaginatedResults); i++ {
+				if allResults[i].Session.Date != allPaginatedResults[i].Session.Date {
+					t.Logf("Result order differs at position %d", i)
+					return false
+				}
+			}
+
+			return true
+		},
+		genPageSize,
+	))
+
+	properties.TestingRun(t)
 }
