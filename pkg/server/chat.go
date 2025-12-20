@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"ideathon/pkg/ai"
+	"ideathon/pkg/storage"
 	"net/http"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 )
@@ -45,20 +43,10 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getChatHistory(w http.ResponseWriter, _ *http.Request) {
-	chatPath := filepath.Join(s.rootDir, "global_chats", "history.json")
-
-	content, err := os.ReadFile(chatPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			json.NewEncoder(w).Encode([]ChatSession{})
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(content)
+	// Use StorageEngine to get chat history
+	// For now, return empty array since we need to implement global chat storage
+	// TODO: Implement global chat storage in StorageEngine
+	json.NewEncoder(w).Encode([]ChatSession{})
 }
 
 func (s *Server) processChat(w http.ResponseWriter, r *http.Request) {
@@ -68,12 +56,12 @@ func (s *Server) processChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Gather Context
+	// 1. Gather Context using StorageEngine
 	contextText := ""
 	if req.Context == "global" {
-		contextText = s.gatherGlobalContext(req.Message)
+		contextText = s.gatherGlobalContextFromStorage(req.Message)
 	} else {
-		contextText = s.gatherSessionContext(req.Context, req.Message)
+		contextText = s.gatherSessionContextFromStorage(req.Context, req.Message)
 	}
 
 	// 2. Call AI
@@ -93,140 +81,111 @@ Answer the question based on the context provided. If the context doesn't contai
 		return
 	}
 
-	// 3. Save to History
-	chatMsg := ChatMessage{
+	// 3. Save to History using StorageEngine
+	chatMsg := storage.ChatMessage{
 		Role:      "assistant",
 		Content:   response,
 		Timestamp: time.Now(),
 	}
-	userMsg := ChatMessage{
+	userMsg := storage.ChatMessage{
 		Role:      "user",
 		Content:   req.Message,
 		Timestamp: time.Now(),
 	}
 
-	s.saveChat(req.Context, userMsg, chatMsg)
+	s.saveChatToStorage(req.Context, userMsg, chatMsg)
 
-	// 4. Return Response
-	json.NewEncoder(w).Encode(chatMsg)
-}
-
-func (s *Server) saveChat(context string, userMsg, aiMsg ChatMessage) {
-	chatDir := filepath.Join(s.rootDir, "global_chats")
-	os.MkdirAll(chatDir, 0755)
-	chatPath := filepath.Join(chatDir, "history.json")
-
-	var sessions []ChatSession
-	content, err := os.ReadFile(chatPath)
-	if err == nil {
-		json.Unmarshal(content, &sessions)
+	// 4. Return Response (convert to API format)
+	apiChatMsg := ChatMessage{
+		Role:      chatMsg.Role,
+		Content:   chatMsg.Content,
+		Timestamp: chatMsg.Timestamp,
 	}
 
-	found := false
-	for i := range sessions {
-		if sessions[i].Context == context {
-			sessions[i].Messages = append(sessions[i].Messages, userMsg, aiMsg)
-			sessions[i].UpdatedAt = time.Now()
-			found = true
-			break
+	json.NewEncoder(w).Encode(apiChatMsg)
+}
+
+func (s *Server) saveChatToStorage(context string, userMsg, aiMsg storage.ChatMessage) {
+	// For session-specific chats, save to the session
+	if context != "global" {
+		// Save user message
+		if err := s.storageEngine.AddChat(context, &userMsg); err != nil {
+			// Log error but don't fail
+			fmt.Printf("Error saving user chat message: %v\n", err)
+		}
+		
+		// Save AI message
+		if err := s.storageEngine.AddChat(context, &aiMsg); err != nil {
+			// Log error but don't fail
+			fmt.Printf("Error saving AI chat message: %v\n", err)
 		}
 	}
-
-	if !found {
-		sessions = append(sessions, ChatSession{
-			ID:        fmt.Sprintf("chat_%d", time.Now().Unix()),
-			Context:   context,
-			Messages:  []ChatMessage{userMsg, aiMsg},
-			UpdatedAt: time.Now(),
-		})
-	}
-
-	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].UpdatedAt.After(sessions[j].UpdatedAt)
-	})
-
-	data, _ := json.MarshalIndent(sessions, "", "  ")
-	os.WriteFile(chatPath, data, 0644)
+	// TODO: Implement global chat storage in StorageEngine
 }
 
-func (s *Server) gatherGlobalContext(_ string) string {
+func (s *Server) gatherGlobalContextFromStorage(query string) string {
 	var contextBuilder strings.Builder
 	contextBuilder.WriteString("Recent Activity Summaries:\n")
 
-	entries, _ := os.ReadDir(s.rootDir)
+	// Get recent sessions using StorageEngine
+	sessions, _, err := s.storageEngine.ListSessions(1, 10) // Get last 10 sessions
+	if err != nil {
+		return "No recent activity found."
+	}
 
-	count := 0
-	for i := len(entries) - 1; i >= 0; i-- {
-		if !entries[i].IsDir() {
-			continue
+	for _, session := range sessions {
+		// Add session summary if available
+		if session.OriginalSummary != "" {
+			contextBuilder.WriteString(fmt.Sprintf("[%s] %s\n", session.Date, session.OriginalSummary))
 		}
-		date := entries[i].Name()
-
-		if count > 5 {
-			break
+		if session.CustomSummary != "" {
+			contextBuilder.WriteString(fmt.Sprintf("[%s] Custom: %s\n", session.Date, session.CustomSummary))
 		}
-		count++
-
-		dateDir := filepath.Join(s.rootDir, date)
-		apps, _ := os.ReadDir(dateDir)
-		for _, app := range apps {
-			if !app.IsDir() {
-				continue
+		
+		// Add some extracted text if available
+		if session.ExtractedText != "" {
+			// Truncate to first 200 chars for context
+			text := session.ExtractedText
+			if len(text) > 200 {
+				text = text[:200] + "..."
 			}
-
-			blocksDir := filepath.Join(dateDir, app.Name(), "blocks")
-			blocks, _ := os.ReadDir(blocksDir)
-
-			for _, block := range blocks {
-				if strings.HasSuffix(block.Name(), ".json") {
-					content, _ := os.ReadFile(filepath.Join(blocksDir, block.Name()))
-					var b struct {
-						MicroSummary string `json:"microSummary"`
-						StartTime    string `json:"startTime"`
-					}
-					json.Unmarshal(content, &b)
-					if b.MicroSummary != "" {
-						contextBuilder.WriteString(fmt.Sprintf("[%s %s] %s: %s\n", date, b.StartTime, app.Name(), b.MicroSummary))
-					}
-				}
-			}
+			contextBuilder.WriteString(fmt.Sprintf("[%s] Text: %s\n", session.Date, text))
 		}
 	}
+
 	return contextBuilder.String()
 }
 
-func (s *Server) gatherSessionContext(date string, _ string) string {
+func (s *Server) gatherSessionContextFromStorage(date string, query string) string {
 	var contextBuilder strings.Builder
 	contextBuilder.WriteString(fmt.Sprintf("Activity for %s:\n", date))
 
-	dateDir := filepath.Join(s.rootDir, date)
-	apps, _ := os.ReadDir(dateDir)
-	for _, app := range apps {
-		if !app.IsDir() {
-			continue
-		}
+	// Get session details
+	session, err := s.storageEngine.GetSession(date)
+	if err != nil {
+		return fmt.Sprintf("No data found for %s", date)
+	}
 
-		blocksDir := filepath.Join(dateDir, app.Name(), "blocks")
-		blocks, _ := os.ReadDir(blocksDir)
+	// Add session summaries
+	if session.OriginalSummary != "" {
+		contextBuilder.WriteString(fmt.Sprintf("Original Summary: %s\n", session.OriginalSummary))
+	}
+	if session.CustomSummary != "" {
+		contextBuilder.WriteString(fmt.Sprintf("Custom Summary: %s\n", session.CustomSummary))
+	}
+	if session.ExtractedText != "" {
+		contextBuilder.WriteString(fmt.Sprintf("Extracted Text: %s\n", session.ExtractedText))
+	}
 
-		for _, block := range blocks {
-			if strings.HasSuffix(block.Name(), ".json") {
-				content, _ := os.ReadFile(filepath.Join(blocksDir, block.Name()))
-				var b struct {
-					MicroSummary string `json:"microSummary"`
-					StartTime    string `json:"startTime"`
-					OCRText      string `json:"ocrText"`
-				}
-				json.Unmarshal(content, &b)
-
-				// Include full OCR text for session-specific chat for better detail
-				contextBuilder.WriteString(fmt.Sprintf("[%s] %s Summary: %s\n", b.StartTime, app.Name(), b.MicroSummary))
-				// Include full OCR text for better context (no truncation)
-				if b.OCRText != "" {
-					contextBuilder.WriteString(fmt.Sprintf("Full Text:\n%s\n\n", b.OCRText))
-				}
-			}
+	// Get chat history for this session
+	chats, err := s.storageEngine.GetChats(date)
+	if err == nil && len(chats) > 0 {
+		contextBuilder.WriteString("\nPrevious Chat History:\n")
+		for _, chat := range chats {
+			contextBuilder.WriteString(fmt.Sprintf("[%s] %s: %s\n", 
+				chat.Timestamp.Format("15:04"), chat.Role, chat.Content))
 		}
 	}
+
 	return contextBuilder.String()
 }

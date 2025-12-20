@@ -84,6 +84,8 @@ func (s *Server) handleArchiveMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// For now, we'll use the legacy filesystem approach for archives
+	// TODO: Implement proper archiving in StorageEngine
 	sourcePath := ""
 	destName := ""
 
@@ -92,9 +94,16 @@ func (s *Server) handleArchiveMove(w http.ResponseWriter, r *http.Request) {
 		sourcePath = filepath.Join(s.rootDir, req.SessionID, req.AppName)
 		destName = fmt.Sprintf("%s_%s", req.SessionID, req.AppName)
 	} else {
-		// Moving entire day
+		// Moving entire day - use StorageEngine to delete from database
+		// but keep filesystem move for now
 		sourcePath = filepath.Join(s.rootDir, req.SessionID)
 		destName = req.SessionID
+		
+		// Delete from StorageEngine (this handles database, vector, and file cleanup)
+		if err := s.storageEngine.DeleteSession(req.SessionID); err != nil {
+			// Log error but continue with filesystem move
+			fmt.Printf("Warning: Failed to delete session from storage engine: %v\n", err)
+		}
 	}
 
 	destPath := filepath.Join(s.rootDir, "archives", req.TargetGroup, destName)
@@ -105,10 +114,14 @@ func (s *Server) handleArchiveMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ensure target directory exists
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create target directory: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	// Move (Rename)
-	// Note: Rename might fail across volumes, but usually fine here
 	if err := os.Rename(sourcePath, destPath); err != nil {
-		// Fallback: Copy and Delete (not implemented for brevity, assuming same volume)
 		http.Error(w, fmt.Sprintf("Failed to move: %v", err), http.StatusInternalServerError)
 		return
 	}
