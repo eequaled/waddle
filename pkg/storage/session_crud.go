@@ -28,13 +28,28 @@ func (sm *SessionManager) Create(session *Session) error {
 	session.UpdatedAt = now
 
 	query := `
-		INSERT INTO sessions (date, custom_title, custom_summary, original_summary, extracted_text_encrypted, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO sessions (date, custom_title, custom_summary, original_summary, extracted_text_encrypted, 
+		                     entities_json, synthesis_status, ai_summary, ai_bullets, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	stmt, err := sm.getStmt(query)
 	if err != nil {
 		return NewStorageError(ErrDatabase, "failed to prepare statement", err)
+	}
+
+	// Set defaults for synthesis columns if not provided
+	if session.EntitiesJSON == "" {
+		session.EntitiesJSON = "[]"
+	}
+	if session.SynthesisStatus == "" {
+		session.SynthesisStatus = "pending"
+	}
+	if session.AISummary == "" {
+		session.AISummary = ""
+	}
+	if session.AIBullets == "" {
+		session.AIBullets = "[]"
 	}
 
 	result, err := stmt.Exec(
@@ -43,6 +58,10 @@ func (sm *SessionManager) Create(session *Session) error {
 		session.CustomSummary,
 		session.OriginalSummary,
 		encryptedText,
+		session.EntitiesJSON,
+		session.SynthesisStatus,
+		session.AISummary,
+		session.AIBullets,
 		session.CreatedAt,
 		session.UpdatedAt,
 	)
@@ -70,7 +89,8 @@ func (sm *SessionManager) Get(date string) (*Session, error) {
 	}
 
 	query := `
-		SELECT id, date, custom_title, custom_summary, original_summary, extracted_text_encrypted, created_at, updated_at
+		SELECT id, date, custom_title, custom_summary, original_summary, extracted_text_encrypted, 
+		       entities_json, synthesis_status, ai_summary, ai_bullets, created_at, updated_at
 		FROM sessions
 		WHERE date = ?
 	`
@@ -89,6 +109,10 @@ func (sm *SessionManager) Get(date string) (*Session, error) {
 		&session.CustomSummary,
 		&session.OriginalSummary,
 		&encryptedText,
+		&session.EntitiesJSON,
+		&session.SynthesisStatus,
+		&session.AISummary,
+		&session.AIBullets,
 		&session.CreatedAt,
 		&session.UpdatedAt,
 	)
@@ -115,7 +139,8 @@ func (sm *SessionManager) Get(date string) (*Session, error) {
 // GetByID retrieves a session by ID.
 func (sm *SessionManager) GetByID(id int64) (*Session, error) {
 	query := `
-		SELECT id, date, custom_title, custom_summary, original_summary, extracted_text_encrypted, created_at, updated_at
+		SELECT id, date, custom_title, custom_summary, original_summary, extracted_text_encrypted, 
+		       entities_json, synthesis_status, ai_summary, ai_bullets, created_at, updated_at
 		FROM sessions
 		WHERE id = ?
 	`
@@ -134,6 +159,10 @@ func (sm *SessionManager) GetByID(id int64) (*Session, error) {
 		&session.CustomSummary,
 		&session.OriginalSummary,
 		&encryptedText,
+		&session.EntitiesJSON,
+		&session.SynthesisStatus,
+		&session.AISummary,
+		&session.AIBullets,
 		&session.CreatedAt,
 		&session.UpdatedAt,
 	)
@@ -177,7 +206,8 @@ func (sm *SessionManager) Update(session *Session) error {
 
 	query := `
 		UPDATE sessions
-		SET custom_title = ?, custom_summary = ?, original_summary = ?, extracted_text_encrypted = ?, updated_at = ?
+		SET custom_title = ?, custom_summary = ?, original_summary = ?, extracted_text_encrypted = ?, 
+		    entities_json = ?, synthesis_status = ?, ai_summary = ?, ai_bullets = ?, updated_at = ?
 		WHERE id = ?
 	`
 
@@ -191,6 +221,10 @@ func (sm *SessionManager) Update(session *Session) error {
 		session.CustomSummary,
 		session.OriginalSummary,
 		encryptedText,
+		session.EntitiesJSON,
+		session.SynthesisStatus,
+		session.AISummary,
+		session.AIBullets,
 		session.UpdatedAt,
 		session.ID,
 	)
@@ -287,7 +321,8 @@ func (sm *SessionManager) List(page, pageSize int) ([]Session, int, error) {
 
 	// Get paginated sessions
 	query := `
-		SELECT id, date, custom_title, custom_summary, original_summary, extracted_text_encrypted, created_at, updated_at
+		SELECT id, date, custom_title, custom_summary, original_summary, extracted_text_encrypted, 
+		       entities_json, synthesis_status, ai_summary, ai_bullets, created_at, updated_at
 		FROM sessions
 		ORDER BY date DESC
 		LIMIT ? OFFSET ?
@@ -310,6 +345,10 @@ func (sm *SessionManager) List(page, pageSize int) ([]Session, int, error) {
 			&session.CustomSummary,
 			&session.OriginalSummary,
 			&encryptedText,
+			&session.EntitiesJSON,
+			&session.SynthesisStatus,
+			&session.AISummary,
+			&session.AIBullets,
 			&session.CreatedAt,
 			&session.UpdatedAt,
 		)

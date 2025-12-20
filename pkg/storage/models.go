@@ -15,6 +15,12 @@ type Session struct {
 	CreatedAt       time.Time     `json:"createdAt"`
 	UpdatedAt       time.Time     `json:"updatedAt"`
 
+	// Synthesis columns (P1 requirements)
+	EntitiesJSON      string `json:"entitiesJson"`      // JSON array of extracted entities
+	SynthesisStatus   string `json:"synthesisStatus"`   // "pending", "completed", "failed"
+	AISummary         string `json:"aiSummary"`         // AI-generated summary
+	AIBullets         string `json:"aiBullets"`         // JSON array of 3 bullet points
+
 	// Relationships (loaded on demand)
 	Activities  []AppActivity `json:"activities,omitempty"`
 	ManualNotes []ManualNote  `json:"manualNotes,omitempty"`
@@ -41,6 +47,10 @@ type ActivityBlock struct {
 	EndTime       time.Time `json:"endTime"`
 	OCRText       string    `json:"ocrText"`      // Encrypted in DB
 	MicroSummary  string    `json:"microSummary"`
+
+	// Capture columns (P0 requirements)
+	CaptureSource      string `json:"captureSource"`      // "etw_uia", "uia_fallback", "polling_ocr"
+	StructuredMetadata string `json:"structuredMetadata"` // JSON object with app-specific data
 }
 
 // ChatMessage represents a chat message in a session.
@@ -81,6 +91,18 @@ type ManualNote struct {
 	ID        int64     `json:"id"`
 	SessionID int64     `json:"sessionId"`
 	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// KnowledgeCard represents an AI-generated summary card for a session.
+type KnowledgeCard struct {
+	ID        int64     `json:"id"`
+	SessionID int64     `json:"sessionId"`
+	Title     string    `json:"title"`
+	Bullets   string    `json:"bullets"`   // JSON array of 3 bullet points
+	Entities  string    `json:"entities"`  // JSON array of extracted entities
+	Status    string    `json:"status"`    // "pending", "completed", "failed"
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
