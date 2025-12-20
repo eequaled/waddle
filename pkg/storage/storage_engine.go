@@ -210,6 +210,23 @@ func (se *StorageEngine) GetChats(sessionDate string) ([]ChatMessage, error) {
 	return se.sessionMgr.GetChats(session.ID)
 }
 
+// Notification operations
+
+// AddNotification adds a notification.
+func (se *StorageEngine) AddNotification(notif *Notification) error {
+	return se.sessionMgr.AddNotification(notif)
+}
+
+// GetNotifications retrieves notifications.
+func (se *StorageEngine) GetNotifications(limit int) ([]Notification, error) {
+	return se.sessionMgr.GetNotifications(limit)
+}
+
+// MarkNotificationsRead marks notifications as read.
+func (se *StorageEngine) MarkNotificationsRead(ids []string) error {
+	return se.sessionMgr.MarkNotificationsRead(ids)
+}
+
 // File operations
 
 // SaveScreenshot saves a screenshot file and returns the file path.

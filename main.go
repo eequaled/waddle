@@ -9,6 +9,7 @@ import (
 	"ideathon/pkg/ocr"
 	"ideathon/pkg/processing"
 	"ideathon/pkg/server"
+	"ideathon/pkg/storage"
 	"ideathon/pkg/tracker"
 	"os"
 	"os/signal"
@@ -85,16 +86,34 @@ func main() {
 		}
 	}()
 
-	// 4. Start API Server
+	// 4. Initialize Storage Engine
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Printf("Error getting home directory: %v\n", err)
+		return
+	}
+	storageDataDir := filepath.Join(homeDir, ".waddle")
+	storageConfig := storage.DefaultStorageConfig(storageDataDir)
+	
+	storageEngine := storage.NewStorageEngine(storageConfig)
+	if err := storageEngine.Initialize(); err != nil {
+		fmt.Printf("Error initializing storage engine: %v\n", err)
+		return
+	}
+	defer storageEngine.Close()
+	
+	fmt.Printf("Storage engine initialized at: %s\n", storageDataDir)
+
+	// 5. Start API Server
 	isPaused := &atomic.Bool{}
-	apiServer := server.NewServer(sessionRootDir, *portFlag, isPaused)
+	apiServer := server.NewServer(sessionRootDir, *portFlag, isPaused, storageEngine)
 	apiServer.Start()
 
-	// 5. Start Monitoring
+	// 6. Start Monitoring
 	focusChan := trackerPoller.Start()
 	clipboardChan := clipboardMonitor.Start()
 
-	// 6. Handle OS Signals
+	// 7. Handle OS Signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 

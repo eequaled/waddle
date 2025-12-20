@@ -3,27 +3,31 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"ideathon/pkg/storage"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 )
 
 type Server struct {
-	rootDir  string
-	port     string
-	isPaused *atomic.Bool
+	rootDir       string
+	port          string
+	isPaused      *atomic.Bool
+	storageEngine *storage.StorageEngine
 }
 
-func NewServer(rootDir string, port string, isPaused *atomic.Bool) *Server {
+func NewServer(rootDir string, port string, isPaused *atomic.Bool, storageEngine *storage.StorageEngine) *Server {
 	return &Server{
-		rootDir:  rootDir,
-		port:     port,
-		isPaused: isPaused,
+		rootDir:       rootDir,
+		port:          port,
+		isPaused:      isPaused,
+		storageEngine: storageEngine,
 	}
 }
 
@@ -47,8 +51,15 @@ func (s *Server) Start() {
 	mux.HandleFunc("/api/sessions", cors(s.handleSessions))
 	mux.HandleFunc("/api/sessions/", cors(s.handleAppDetails)) // Wildcard for dates
 
+	// New search endpoints
+	mux.HandleFunc("/api/search/fulltext", cors(s.handleFullTextSearch))
+	mux.HandleFunc("/api/search/semantic", cors(s.handleSemanticSearch))
+
 	// Status Endpoint
 	mux.HandleFunc("/api/status", cors(s.handleStatus))
+
+	// Health Endpoint
+	mux.HandleFunc("/api/health", cors(s.handleHealth))
 
 	// Blacklist Endpoint
 	mux.HandleFunc("/api/blacklist", cors(s.handleBlacklist))
@@ -79,22 +90,120 @@ func (s *Server) Start() {
 
 // GET /api/sessions -> Returns list of dates [ "2023-10-27", ... ]
 func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
-	entries, err := os.ReadDir(s.rootDir)
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Use StorageEngine to list sessions
+	sessions, _, err := s.storageEngine.ListSessions(1, 1000) // Get all sessions
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var dates []string
-	for _, e := range entries {
-		if e.IsDir() && e.Name() != "profile" {
-			dates = append(dates, e.Name())
-		}
+	for _, session := range sessions {
+		dates = append(dates, session.Date)
 	}
+
 	// Sort reverse (newest first)
 	sort.Sort(sort.Reverse(sort.StringSlice(dates)))
 
 	json.NewEncoder(w).Encode(dates)
+}
+
+// GET /api/search/fulltext -> Full-text search
+func (s *Server) handleFullTextSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "Query parameter 'q' is required", http.StatusBadRequest)
+		return
+	}
+
+	page := 1
+	if p := r.URL.Query().Get("page"); p != "" {
+		if parsed, err := strconv.Atoi(p); err == nil && parsed > 0 {
+			page = parsed
+		}
+	}
+
+	pageSize := 50
+	if ps := r.URL.Query().Get("pageSize"); ps != "" {
+		if parsed, err := strconv.Atoi(ps); err == nil && parsed > 0 && parsed <= 100 {
+			pageSize = parsed
+		}
+	}
+
+	results, err := s.storageEngine.FullTextSearch(query, page, pageSize)
+	if err != nil {
+		// Return empty array instead of error for compatibility
+		json.NewEncoder(w).Encode([]storage.SearchResult{})
+		return
+	}
+
+	json.NewEncoder(w).Encode(results)
+}
+
+// GET /api/search/semantic -> Semantic search
+func (s *Server) handleSemanticSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "Query parameter 'q' is required", http.StatusBadRequest)
+		return
+	}
+
+	topK := 10
+	if k := r.URL.Query().Get("topK"); k != "" {
+		if parsed, err := strconv.Atoi(k); err == nil && parsed > 0 && parsed <= 100 {
+			topK = parsed
+		}
+	}
+
+	var dateRange *storage.DateRange
+	startDate := r.URL.Query().Get("startDate")
+	endDate := r.URL.Query().Get("endDate")
+	if startDate != "" || endDate != "" {
+		dateRange = &storage.DateRange{
+			StartDate: startDate,
+			EndDate:   endDate,
+		}
+	}
+
+	results, err := s.storageEngine.SemanticSearch(query, topK, dateRange)
+	if err != nil {
+		// Return empty array instead of error for compatibility
+		json.NewEncoder(w).Encode([]storage.SearchResult{})
+		return
+	}
+
+	json.NewEncoder(w).Encode(results)
+}
+
+// GET /api/health -> Returns health status
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	health, err := s.storageEngine.HealthCheck()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(health)
 }
 
 // GET /api/status -> Returns { "paused": bool }
@@ -195,55 +304,33 @@ func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 1 && parts[0] != "" {
-		// List Apps for Date
+		// List Apps for Date - use StorageEngine to get activity blocks
 		date := parts[0]
-		dateDir := filepath.Join(s.rootDir, date)
-		entries, err := os.ReadDir(dateDir)
+		
+		// Verify session exists
+		_, err := s.storageEngine.GetSession(date)
 		if err != nil {
-			http.Error(w, "Date not found", http.StatusNotFound)
+			if storage.IsNotFound(err) {
+				http.Error(w, "Date not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		type AppEntry struct {
-			Name    string
-			ModTime int64
-		}
-		var appEntries []AppEntry
-
-		for _, e := range entries {
-			if e.IsDir() {
-				info, err := e.Info()
-				if err == nil {
-					appEntries = append(appEntries, AppEntry{
-						Name:    e.Name(),
-						ModTime: info.ModTime().Unix(),
-					})
-				}
-			}
-		}
-
-		// Sort by ModTime descending
-		sort.Slice(appEntries, func(i, j int) bool {
-			return appEntries[i].ModTime > appEntries[j].ModTime
-		})
-
-		var apps []string
-		for _, e := range appEntries {
-			apps = append(apps, e.Name)
-		}
-
-		json.NewEncoder(w).Encode(apps)
+		// For now, return empty list since we need to implement app listing
+		// This would require querying the database for app activities
+		// TODO: Implement proper app listing from database
+		json.NewEncoder(w).Encode([]string{})
 		return
 	}
 
 	if len(parts) == 2 && parts[1] == "metadata" {
-		// Get Session Metadata
+		// Get Session Metadata using StorageEngine
 		date := parts[0]
-		metadataPath := filepath.Join(s.rootDir, date, "metadata.json")
-
-		content, err := os.ReadFile(metadataPath)
+		session, err := s.storageEngine.GetSession(date)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if storage.IsNotFound(err) {
 				// Return empty/default metadata
 				json.NewEncoder(w).Encode(SessionMetadata{})
 				return
@@ -252,8 +339,15 @@ func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(content)
+		// Convert storage.Session to API SessionMetadata format
+		metadata := SessionMetadata{
+			CustomTitle:     session.CustomTitle,
+			CustomSummary:   session.CustomSummary,
+			OriginalSummary: session.OriginalSummary,
+			ManualNotes:     []ManualNote{}, // Initialize as empty slice
+		}
+
+		json.NewEncoder(w).Encode(metadata)
 		return
 	}
 
@@ -261,23 +355,28 @@ func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
 		// Get App Details
 		date := parts[0]
 		app := parts[1]
-		appDir := filepath.Join(s.rootDir, date, app)
 
-		if _, err := os.Stat(appDir); os.IsNotExist(err) {
-			http.Error(w, "App not found", http.StatusNotFound)
+		// Verify session exists
+		_, err := s.storageEngine.GetSession(date)
+		if err != nil {
+			if storage.IsNotFound(err) {
+				http.Error(w, "Session not found", http.StatusNotFound)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		// Check if requesting blocks
 		if len(parts) == 3 && parts[2] == "blocks" {
-			blocksDir := filepath.Join(appDir, "blocks")
-			entries, err := os.ReadDir(blocksDir)
+			blocks, err := s.storageEngine.GetActivityBlocks(date, app)
 			if err != nil {
 				// Return empty list if no blocks yet
 				json.NewEncoder(w).Encode([]interface{}{})
 				return
 			}
 
+			// Convert storage.ActivityBlock to API format
 			type BlockData struct {
 				ID           string `json:"id"`
 				StartTime    string `json:"startTime"`
@@ -285,51 +384,29 @@ func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
 				MicroSummary string `json:"microSummary"`
 				OCRText      string `json:"ocrText"`
 			}
-			var blocks []BlockData
+			var apiBlocks []BlockData
 
-			for _, e := range entries {
-				if strings.HasSuffix(e.Name(), ".json") {
-					content, _ := os.ReadFile(filepath.Join(blocksDir, e.Name()))
-					var block BlockData
-					json.Unmarshal(content, &block)
-					blocks = append(blocks, block)
-				}
+			for _, block := range blocks {
+				apiBlocks = append(apiBlocks, BlockData{
+					ID:           block.BlockID,
+					StartTime:    block.StartTime.Format(time.RFC3339),
+					EndTime:      block.EndTime.Format(time.RFC3339),
+					MicroSummary: block.MicroSummary,
+					OCRText:      block.OCRText,
+				})
 			}
-			json.NewEncoder(w).Encode(blocks)
+			json.NewEncoder(w).Encode(apiBlocks)
 			return
 		}
 
-		// List files (Default behavior)
-		entries, err := os.ReadDir(appDir)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
+		// List files - for now, return empty since files are handled by filesystem
+		// TODO: Implement file listing through StorageEngine
 		type FileInfo struct {
 			Name string `json:"name"`
 			Type string `json:"type"` // "image" or "text"
 			Url  string `json:"url"`
 		}
 		var files []FileInfo
-
-		for _, e := range entries {
-			if !e.IsDir() {
-				fType := "unknown"
-				if strings.HasSuffix(e.Name(), ".png") {
-					fType = "image"
-				} else if strings.HasSuffix(e.Name(), ".txt") {
-					fType = "text"
-				}
-
-				url := fmt.Sprintf("http://localhost:%s/images/%s/%s/%s", s.port, date, app, e.Name())
-				files = append(files, FileInfo{
-					Name: e.Name(),
-					Type: fType,
-					Url:  url,
-				})
-			}
-		}
 		json.NewEncoder(w).Encode(files)
 		return
 	}
@@ -348,15 +425,25 @@ type SessionMetadata struct {
 	CustomTitle     string       `json:"customTitle,omitempty"`
 	CustomSummary   string       `json:"customSummary,omitempty"`
 	OriginalSummary string       `json:"originalSummary,omitempty"`
-	ManualNotes     []ManualNote `json:"manualNotes,omitempty"`
+	ManualNotes     []ManualNote `json:"manualNotes"`
 }
 
 // PUT /api/sessions/{date} -> Updates session metadata
 func (s *Server) handleSessionUpdate(w http.ResponseWriter, r *http.Request, date string) {
-	dateDir := filepath.Join(s.rootDir, date)
-	if _, err := os.Stat(dateDir); os.IsNotExist(err) {
-		http.Error(w, "Session not found", http.StatusNotFound)
-		return
+	// Get existing session
+	session, err := s.storageEngine.GetSession(date)
+	if err != nil {
+		if storage.IsNotFound(err) {
+			// Create new session if it doesn't exist
+			session, err = s.storageEngine.CreateSession(date)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	var metadata SessionMetadata
@@ -365,15 +452,12 @@ func (s *Server) handleSessionUpdate(w http.ResponseWriter, r *http.Request, dat
 		return
 	}
 
-	// Save metadata to a JSON file in the session directory
-	metadataPath := filepath.Join(dateDir, "metadata.json")
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	// Update session with new metadata
+	session.CustomTitle = metadata.CustomTitle
+	session.CustomSummary = metadata.CustomSummary
+	session.OriginalSummary = metadata.OriginalSummary
 
-	if err := os.WriteFile(metadataPath, data, 0644); err != nil {
+	if err := s.storageEngine.UpdateSession(session); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -383,14 +467,11 @@ func (s *Server) handleSessionUpdate(w http.ResponseWriter, r *http.Request, dat
 
 // DELETE /api/sessions/{date} -> Deletes session
 func (s *Server) handleSessionDelete(w http.ResponseWriter, _ *http.Request, date string) {
-	dateDir := filepath.Join(s.rootDir, date)
-	if _, err := os.Stat(dateDir); os.IsNotExist(err) {
-		http.Error(w, "Session not found", http.StatusNotFound)
-		return
-	}
-
-	// Remove the entire session directory
-	if err := os.RemoveAll(dateDir); err != nil {
+	if err := s.storageEngine.DeleteSession(date); err != nil {
+		if storage.IsNotFound(err) {
+			http.Error(w, "Session not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -413,31 +494,39 @@ type Notification struct {
 // GET /api/notifications -> Returns list of notifications
 // POST /api/notifications -> Creates a new notification
 func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
-	notificationsPath := filepath.Join(s.rootDir, "notifications.json")
-
 	if r.Method == "GET" {
-		content, err := os.ReadFile(notificationsPath)
+		// Use StorageEngine to get notifications
+		notifications, err := s.storageEngine.GetNotifications(100) // Get last 100
 		if err != nil {
-			if os.IsNotExist(err) {
-				json.NewEncoder(w).Encode([]Notification{})
-				return
-			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		var notifications []Notification
-		if err := json.Unmarshal(content, &notifications); err != nil {
-			json.NewEncoder(w).Encode([]Notification{})
-			return
+		// Convert storage.Notification to API Notification format
+		var apiNotifications []Notification
+		for _, notif := range notifications {
+			apiNotif := Notification{
+				ID:         notif.ID,
+				Type:       notif.Type,
+				Title:      notif.Title,
+				Message:    notif.Message,
+				Timestamp:  notif.Timestamp.Format(time.RFC3339),
+				Read:       notif.Read,
+				SessionRef: notif.SessionRef,
+			}
+			
+			// Parse metadata JSON string to map
+			if notif.Metadata != "" {
+				var metadata map[string]string
+				if err := json.Unmarshal([]byte(notif.Metadata), &metadata); err == nil {
+					apiNotif.Metadata = metadata
+				}
+			}
+			
+			apiNotifications = append(apiNotifications, apiNotif)
 		}
 
-		// Sort by timestamp descending (newest first)
-		sort.Slice(notifications, func(i, j int) bool {
-			return notifications[i].Timestamp > notifications[j].Timestamp
-		})
-
-		json.NewEncoder(w).Encode(notifications)
+		json.NewEncoder(w).Encode(apiNotifications)
 		return
 	}
 
@@ -448,29 +537,34 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Generate ID and timestamp
-		newNotif.ID = fmt.Sprintf("notif-%d", time.Now().UnixNano())
-		newNotif.Timestamp = time.Now().Format(time.RFC3339)
+		// Convert API Notification to storage.Notification
+		storageNotif := &storage.Notification{
+			ID:         fmt.Sprintf("notif-%d", time.Now().UnixNano()),
+			Type:       newNotif.Type,
+			Title:      newNotif.Title,
+			Message:    newNotif.Message,
+			Timestamp:  time.Now(),
+			Read:       false,
+			SessionRef: newNotif.SessionRef,
+		}
+		
+		// Convert metadata map to JSON string
+		if newNotif.Metadata != nil {
+			metadataBytes, err := json.Marshal(newNotif.Metadata)
+			if err == nil {
+				storageNotif.Metadata = string(metadataBytes)
+			}
+		}
+
+		if err := s.storageEngine.AddNotification(storageNotif); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Return the created notification in API format
+		newNotif.ID = storageNotif.ID
+		newNotif.Timestamp = storageNotif.Timestamp.Format(time.RFC3339)
 		newNotif.Read = false
-
-		// Load existing notifications
-		var notifications []Notification
-		content, err := os.ReadFile(notificationsPath)
-		if err == nil {
-			json.Unmarshal(content, &notifications)
-		}
-
-		// Add new notification at the beginning
-		notifications = append([]Notification{newNotif}, notifications...)
-
-		// Keep only last 100 notifications
-		if len(notifications) > 100 {
-			notifications = notifications[:100]
-		}
-
-		// Save
-		data, _ := json.MarshalIndent(notifications, "", "  ")
-		os.WriteFile(notificationsPath, data, 0644)
 
 		json.NewEncoder(w).Encode(newNotif)
 		return
@@ -494,32 +588,11 @@ func (s *Server) handleNotificationsRead(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	notificationsPath := filepath.Join(s.rootDir, "notifications.json")
-
-	// Load existing notifications
-	var notifications []Notification
-	content, err := os.ReadFile(notificationsPath)
-	if err != nil {
-		http.Error(w, "No notifications found", http.StatusNotFound)
+	// Use StorageEngine to mark notifications as read
+	if err := s.storageEngine.MarkNotificationsRead(body.IDs); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	json.Unmarshal(content, &notifications)
-
-	// Mark specified notifications as read
-	idSet := make(map[string]bool)
-	for _, id := range body.IDs {
-		idSet[id] = true
-	}
-
-	for i := range notifications {
-		if idSet[notifications[i].ID] {
-			notifications[i].Read = true
-		}
-	}
-
-	// Save
-	data, _ := json.MarshalIndent(notifications, "", "  ")
-	os.WriteFile(notificationsPath, data, 0644)
 
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }

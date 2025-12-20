@@ -44,6 +44,11 @@ type StorageEngineInterface interface {
 	AddChat(sessionDate string, chat *ChatMessage) error
 	GetChats(sessionDate string) ([]ChatMessage, error)
 
+	// Notification operations
+	AddNotification(notif *Notification) error
+	GetNotifications(limit int) ([]Notification, error)
+	MarkNotificationsRead(ids []string) error
+
 	// File operations
 	SaveScreenshot(sessionDate, appName, filename string, data []byte) (string, error)
 	GetScreenshotPath(sessionDate, appName, filename string) string
