@@ -14,6 +14,7 @@ require (
 
 require (
 	github.com/0xrawsec/golang-utils v1.3.2 // indirect
+	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gen2brain/shm v0.1.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect

@@ -30,18 +30,29 @@ func (sm *SessionManager) AddBlock(sessionID int64, appName string, block *Activ
 	}
 
 	query := `
-		INSERT INTO activity_blocks (app_activity_id, block_id, start_time, end_time, ocr_text_encrypted, micro_summary)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO activity_blocks (app_activity_id, block_id, start_time, end_time, ocr_text_encrypted, micro_summary, 
+		                           capture_source, structured_metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(app_activity_id, block_id) DO UPDATE SET
 			start_time = excluded.start_time,
 			end_time = excluded.end_time,
 			ocr_text_encrypted = excluded.ocr_text_encrypted,
-			micro_summary = excluded.micro_summary
+			micro_summary = excluded.micro_summary,
+			capture_source = excluded.capture_source,
+			structured_metadata = excluded.structured_metadata
 	`
 
 	stmt, err := sm.getStmt(query)
 	if err != nil {
 		return NewStorageError(ErrDatabase, "failed to prepare statement", err)
+	}
+
+	// Set defaults for capture columns if not provided
+	if block.CaptureSource == "" {
+		block.CaptureSource = "polling_ocr"
+	}
+	if block.StructuredMetadata == "" {
+		block.StructuredMetadata = "{}"
 	}
 
 	result, err := stmt.Exec(
@@ -51,6 +62,8 @@ func (sm *SessionManager) AddBlock(sessionID int64, appName string, block *Activ
 		block.EndTime,
 		encryptedOCR,
 		block.MicroSummary,
+		block.CaptureSource,
+		block.StructuredMetadata,
 	)
 	if err != nil {
 		return NewStorageError(ErrDatabase, "failed to add block", err)
@@ -68,7 +81,8 @@ func (sm *SessionManager) AddBlock(sessionID int64, appName string, block *Activ
 // GetBlocks retrieves all activity blocks for a session's app.
 func (sm *SessionManager) GetBlocks(sessionID int64, appName string) ([]ActivityBlock, error) {
 	query := `
-		SELECT ab.id, ab.app_activity_id, ab.block_id, ab.start_time, ab.end_time, ab.ocr_text_encrypted, ab.micro_summary
+		SELECT ab.id, ab.app_activity_id, ab.block_id, ab.start_time, ab.end_time, ab.ocr_text_encrypted, ab.micro_summary,
+		       ab.capture_source, ab.structured_metadata
 		FROM activity_blocks ab
 		JOIN app_activities aa ON ab.app_activity_id = aa.id
 		WHERE aa.session_id = ? AND aa.app_name = ?
@@ -93,6 +107,8 @@ func (sm *SessionManager) GetBlocks(sessionID int64, appName string) ([]Activity
 			&block.EndTime,
 			&encryptedOCR,
 			&block.MicroSummary,
+			&block.CaptureSource,
+			&block.StructuredMetadata,
 		)
 		if err != nil {
 			return nil, NewStorageError(ErrDatabase, "failed to scan block", err)

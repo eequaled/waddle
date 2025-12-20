@@ -171,6 +171,103 @@ CREATE TRIGGER IF NOT EXISTS activity_blocks_au AFTER UPDATE ON activity_blocks 
 END;
 `,
 	},
+	{
+		Version:     3,
+		Description: "Add synthesis columns to sessions and capture columns to activity_blocks, create knowledge_cards table",
+		SQL: `
+-- Add synthesis columns to sessions table
+ALTER TABLE sessions ADD COLUMN entities_json TEXT DEFAULT '[]';
+ALTER TABLE sessions ADD COLUMN synthesis_status TEXT DEFAULT 'pending';
+ALTER TABLE sessions ADD COLUMN ai_summary TEXT DEFAULT '';
+ALTER TABLE sessions ADD COLUMN ai_bullets TEXT DEFAULT '[]';
+
+-- Add capture columns to activity_blocks table
+ALTER TABLE activity_blocks ADD COLUMN capture_source TEXT DEFAULT 'polling_ocr';
+ALTER TABLE activity_blocks ADD COLUMN structured_metadata TEXT DEFAULT '{}';
+
+-- Create knowledge_cards table
+CREATE TABLE IF NOT EXISTS knowledge_cards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    bullets TEXT NOT NULL, -- JSON array of 3 bullet points
+    entities TEXT NOT NULL, -- JSON array of extracted entities
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'completed', 'failed')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_knowledge_cards_session ON knowledge_cards(session_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_cards_status ON knowledge_cards(status);
+
+-- Update FTS5 triggers to include new synthesis columns
+DROP TRIGGER IF EXISTS sessions_ai;
+DROP TRIGGER IF EXISTS sessions_ad;
+DROP TRIGGER IF EXISTS sessions_au;
+
+-- Recreate FTS5 virtual table with new columns
+DROP TABLE IF EXISTS sessions_fts;
+CREATE VIRTUAL TABLE sessions_fts USING fts5(
+    date,
+    custom_title,
+    custom_summary,
+    original_summary,
+    ai_summary,
+    entities_json,
+    content='sessions',
+    content_rowid='id'
+);
+
+-- Recreate triggers with new columns
+CREATE TRIGGER sessions_ai AFTER INSERT ON sessions BEGIN
+    INSERT INTO sessions_fts(rowid, date, custom_title, custom_summary, original_summary, ai_summary, entities_json)
+    VALUES (new.id, new.date, new.custom_title, new.custom_summary, new.original_summary, new.ai_summary, new.entities_json);
+END;
+
+CREATE TRIGGER sessions_ad AFTER DELETE ON sessions BEGIN
+    INSERT INTO sessions_fts(sessions_fts, rowid, date, custom_title, custom_summary, original_summary, ai_summary, entities_json)
+    VALUES ('delete', old.id, old.date, old.custom_title, old.custom_summary, old.original_summary, old.ai_summary, old.entities_json);
+END;
+
+CREATE TRIGGER sessions_au AFTER UPDATE ON sessions BEGIN
+    INSERT INTO sessions_fts(sessions_fts, rowid, date, custom_title, custom_summary, original_summary, ai_summary, entities_json)
+    VALUES ('delete', old.id, old.date, old.custom_title, old.custom_summary, old.original_summary, old.ai_summary, old.entities_json);
+    INSERT INTO sessions_fts(rowid, date, custom_title, custom_summary, original_summary, ai_summary, entities_json)
+    VALUES (new.id, new.date, new.custom_title, new.custom_summary, new.original_summary, new.ai_summary, new.entities_json);
+END;
+
+-- Update activity_blocks FTS5 to include structured metadata
+DROP TRIGGER IF EXISTS activity_blocks_ai;
+DROP TRIGGER IF EXISTS activity_blocks_ad;
+DROP TRIGGER IF EXISTS activity_blocks_au;
+
+DROP TABLE IF EXISTS activity_blocks_fts;
+CREATE VIRTUAL TABLE activity_blocks_fts USING fts5(
+    micro_summary,
+    structured_metadata,
+    content='activity_blocks',
+    content_rowid='id'
+);
+
+CREATE TRIGGER activity_blocks_ai AFTER INSERT ON activity_blocks BEGIN
+    INSERT INTO activity_blocks_fts(rowid, micro_summary, structured_metadata)
+    VALUES (new.id, new.micro_summary, new.structured_metadata);
+END;
+
+CREATE TRIGGER activity_blocks_ad AFTER DELETE ON activity_blocks BEGIN
+    INSERT INTO activity_blocks_fts(activity_blocks_fts, rowid, micro_summary, structured_metadata)
+    VALUES ('delete', old.id, old.micro_summary, old.structured_metadata);
+END;
+
+CREATE TRIGGER activity_blocks_au AFTER UPDATE ON activity_blocks BEGIN
+    INSERT INTO activity_blocks_fts(activity_blocks_fts, rowid, micro_summary, structured_metadata)
+    VALUES ('delete', old.id, old.micro_summary, old.structured_metadata);
+    INSERT INTO activity_blocks_fts(rowid, micro_summary, structured_metadata)
+    VALUES (new.id, new.micro_summary, new.structured_metadata);
+END;
+`,
+	},
 }
 
 // runMigrations runs all pending database migrations.
