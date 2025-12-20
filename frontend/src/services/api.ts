@@ -194,6 +194,19 @@ export const api = {
         });
         if (!res.ok) throw new Error('Failed to delete profile image');
     },
+
+    // Knowledge Cards
+    getKnowledgeCards: async (): Promise<any[]> => {
+        const res = await fetch(`${API_BASE}/knowledge-cards`);
+        if (!res.ok) throw new Error('Failed to fetch knowledge cards');
+        return res.json();
+    },
+
+    getPendingCount: async (): Promise<{ count: number }> => {
+        const res = await fetch(`${API_BASE}/synthesis/pending-count`);
+        if (!res.ok) throw new Error('Failed to fetch pending count');
+        return res.json();
+    },
 };
 
 // Helper to get lightweight session summary (for list view)
