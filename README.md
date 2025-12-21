@@ -44,7 +44,11 @@ ollama serve
 ollama pull gemma2:2b
 ```
 
-The app works fully without Ollama—AI chat will simply be unavailable.
+
+
+
+## everything under is VERY outdated for now 
+
 
 ## 🖥️ System Requirements
 
