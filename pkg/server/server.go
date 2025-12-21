@@ -51,6 +51,9 @@ func (s *Server) Start() {
 	mux.HandleFunc("/api/sessions", cors(s.handleSessions))
 	mux.HandleFunc("/api/sessions/", cors(s.handleAppDetails)) // Wildcard for dates
 
+	// Knowledge Cards Endpoint
+	mux.HandleFunc("/api/knowledge-cards", cors(s.handleKnowledgeCards))
+
 	// New search endpoints
 	mux.HandleFunc("/api/search/fulltext", cors(s.handleFullTextSearch))
 	mux.HandleFunc("/api/search/semantic", cors(s.handleSemanticSearch))
@@ -111,6 +114,38 @@ func (s *Server) handleSessions(w http.ResponseWriter, r *http.Request) {
 	sort.Sort(sort.Reverse(sort.StringSlice(dates)))
 
 	json.NewEncoder(w).Encode(dates)
+}
+
+// GET /api/knowledge-cards -> Returns list of knowledge cards
+func (s *Server) handleKnowledgeCards(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get query parameters
+	status := r.URL.Query().Get("status") // Optional filter by status
+	limit := 50 // Default limit
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 1000 {
+			limit = parsed
+		}
+	}
+
+	// Get knowledge cards from storage engine
+	cards, err := s.storageEngine.GetKnowledgeCards(status, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return empty array if no cards found
+	if cards == nil {
+		cards = []storage.KnowledgeCard{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(cards)
 }
 
 // GET /api/search/fulltext -> Full-text search

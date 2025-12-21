@@ -1,8 +1,10 @@
 package synthesis
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -85,8 +87,8 @@ func (w *Worker) ProcessNext() error {
 
 	var pendingSession *storage.Session
 	for _, session := range sessions {
-		// Check if synthesis is pending (assuming we add this field to Session)
-		if session.CustomSummary == "" && session.ExtractedText != "" {
+		// Check if synthesis is pending using the synthesis_status field
+		if session.SynthesisStatus == "pending" && session.ExtractedText != "" {
 			pendingSession = &session
 			break
 		}
@@ -105,17 +107,58 @@ func (w *Worker) ProcessNext() error {
 
 	// Extract entities
 	entities := w.extractor.Extract(pendingSession.ExtractedText)
-	_ = entities // TODO: Store entities in session when schema is updated
+	
+	// Convert entities to JSON
+	entitiesJSON, err := json.Marshal(entities)
+	if err != nil {
+		return fmt.Errorf("failed to marshal entities: %w", err)
+	}
+	
+	// Convert summary to bullet points array
+	bullets := strings.Split(summary, "\n")
+	var cleanBullets []string
+	for _, bullet := range bullets {
+		bullet = strings.TrimSpace(bullet)
+		if bullet != "" && (strings.HasPrefix(bullet, "•") || strings.HasPrefix(bullet, "-") || strings.HasPrefix(bullet, "*")) {
+			cleanBullets = append(cleanBullets, bullet)
+		}
+	}
+	
+	// Ensure exactly 3 bullets
+	for len(cleanBullets) < 3 {
+		cleanBullets = append(cleanBullets, "• Additional activity")
+	}
+	if len(cleanBullets) > 3 {
+		cleanBullets = cleanBullets[:3]
+	}
+	
+	bulletsJSON, err := json.Marshal(cleanBullets)
+	if err != nil {
+		return fmt.Errorf("failed to marshal bullets: %w", err)
+	}
+	
+	// Create knowledge card
+	knowledgeCard := &storage.KnowledgeCard{
+		SessionID: pendingSession.ID,
+		Title:     fmt.Sprintf("Session %s", pendingSession.Date),
+		Bullets:   string(bulletsJSON),
+		Entities:  string(entitiesJSON),
+		Status:    "completed",
+	}
+	
+	if err := w.storage.CreateKnowledgeCard(knowledgeCard); err != nil {
+		return fmt.Errorf("failed to create knowledge card: %w", err)
+	}
 
 	// Update session with synthesis results
 	pendingSession.CustomSummary = summary
-	// Note: We'd need to add entities field to Session struct
+	pendingSession.SynthesisStatus = "completed"
 	
 	if err := w.storage.UpdateSession(pendingSession); err != nil {
 		return fmt.Errorf("failed to update session: %w", err)
 	}
 
-	log.Printf("Synthesized session: %s", pendingSession.Date)
+	log.Printf("Synthesized session: %s (Knowledge Card ID: %d)", pendingSession.Date, knowledgeCard.ID)
 	return nil
 }
 
