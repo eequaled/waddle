@@ -352,3 +352,117 @@ func (se *StorageEngine) GetPendingSessionsCount() (int, error) {
 func (se *StorageEngine) UpdateSessionSynthesis(sessionID int64, entitiesJSON, synthesisStatus, aiSummary, aiBullets string) error {
 	return se.sessionMgr.UpdateSessionSynthesis(sessionID, entitiesJSON, synthesisStatus, aiSummary, aiBullets)
 }
+
+// Knowledge Card operations
+
+// CreateKnowledgeCard creates a new knowledge card for a session.
+func (se *StorageEngine) CreateKnowledgeCard(card *KnowledgeCard) error {
+	card.CreatedAt = time.Now()
+	card.UpdatedAt = time.Now()
+	
+	result, err := se.sessionMgr.DB().Exec(`
+		INSERT INTO knowledge_cards (session_id, title, bullets, entities, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, card.SessionID, card.Title, card.Bullets, card.Entities, card.Status, card.CreatedAt, card.UpdatedAt)
+	
+	if err != nil {
+		return NewStorageError(ErrDatabase, "failed to create knowledge card", err)
+	}
+	
+	id, err := result.LastInsertId()
+	if err != nil {
+		return NewStorageError(ErrDatabase, "failed to get knowledge card ID", err)
+	}
+	
+	card.ID = id
+	return nil
+}
+
+// GetKnowledgeCards retrieves all knowledge cards, optionally filtered by status.
+func (se *StorageEngine) GetKnowledgeCards(status string, limit int) ([]KnowledgeCard, error) {
+	var query string
+	var args []interface{}
+	
+	if status != "" {
+		query = `
+			SELECT id, session_id, title, bullets, entities, status, created_at, updated_at
+			FROM knowledge_cards 
+			WHERE status = ?
+			ORDER BY created_at DESC
+			LIMIT ?
+		`
+		args = []interface{}{status, limit}
+	} else {
+		query = `
+			SELECT id, session_id, title, bullets, entities, status, created_at, updated_at
+			FROM knowledge_cards 
+			ORDER BY created_at DESC
+			LIMIT ?
+		`
+		args = []interface{}{limit}
+	}
+	
+	rows, err := se.sessionMgr.DB().Query(query, args...)
+	if err != nil {
+		return nil, NewStorageError(ErrDatabase, "failed to query knowledge cards", err)
+	}
+	defer rows.Close()
+	
+	var cards []KnowledgeCard
+	for rows.Next() {
+		var card KnowledgeCard
+		err := rows.Scan(&card.ID, &card.SessionID, &card.Title, &card.Bullets, 
+			&card.Entities, &card.Status, &card.CreatedAt, &card.UpdatedAt)
+		if err != nil {
+			return nil, NewStorageError(ErrDatabase, "failed to scan knowledge card", err)
+		}
+		cards = append(cards, card)
+	}
+	
+	return cards, nil
+}
+
+// GetKnowledgeCardsBySession retrieves knowledge cards for a specific session.
+func (se *StorageEngine) GetKnowledgeCardsBySession(sessionID int64) ([]KnowledgeCard, error) {
+	rows, err := se.sessionMgr.DB().Query(`
+		SELECT id, session_id, title, bullets, entities, status, created_at, updated_at
+		FROM knowledge_cards 
+		WHERE session_id = ?
+		ORDER BY created_at DESC
+	`, sessionID)
+	
+	if err != nil {
+		return nil, NewStorageError(ErrDatabase, "failed to query knowledge cards by session", err)
+	}
+	defer rows.Close()
+	
+	var cards []KnowledgeCard
+	for rows.Next() {
+		var card KnowledgeCard
+		err := rows.Scan(&card.ID, &card.SessionID, &card.Title, &card.Bullets, 
+			&card.Entities, &card.Status, &card.CreatedAt, &card.UpdatedAt)
+		if err != nil {
+			return nil, NewStorageError(ErrDatabase, "failed to scan knowledge card", err)
+		}
+		cards = append(cards, card)
+	}
+	
+	return cards, nil
+}
+
+// UpdateKnowledgeCard updates an existing knowledge card.
+func (se *StorageEngine) UpdateKnowledgeCard(card *KnowledgeCard) error {
+	card.UpdatedAt = time.Now()
+	
+	_, err := se.sessionMgr.DB().Exec(`
+		UPDATE knowledge_cards 
+		SET title = ?, bullets = ?, entities = ?, status = ?, updated_at = ?
+		WHERE id = ?
+	`, card.Title, card.Bullets, card.Entities, card.Status, card.UpdatedAt, card.ID)
+	
+	if err != nil {
+		return NewStorageError(ErrDatabase, "failed to update knowledge card", err)
+	}
+	
+	return nil
+}
