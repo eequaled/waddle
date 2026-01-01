@@ -211,7 +211,6 @@ Each MR project is a **battle-tested, production-ready library** extracted from 
 | **MR-go-sqlite-migrator** | Schema management | State machine, rollback, checksums |
 | **MR-win-dpapi-vault** | Encryption | AES-256-GCM, Argon2id, Credential Manager |
 | **MR-react-memory-dashboard** | UI components | React 19, Radix UI, TipTap, Recharts |
-| **moodle-scraper** | Browser automation | Chrome extension, Cobalt API integration |
 
 ## Use Cases
 
