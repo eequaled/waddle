@@ -47,6 +47,25 @@ func (v *windowsVault) Load(key string) ([]byte, error) {
 	path := filepath.Join(v.storePath, key+".dat")
 	encrypted, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) && key == "master" {
+			// Legacy fallback for v1 migration: try Credential Manager
+			legacyData, err := legacyReadFromCredentialManager()
+			if err == nil && len(legacyData) > 0 {
+				// We found legacy data! Save it in the new format right away for migration
+				// The legacy data is already DPAPI protected, but our Save function will DPAPI protect it *again*.
+				// Wait, legacy data is already DPAPI encrypted. 
+				// The Vault interface expects byte arrays that it will DPAPI encrypt. 
+				// So we should first decrypt the legacy DPAPI blob, then return it.
+				plaintext, decErr := dpapiDecrypt(legacyData)
+				if decErr == nil {
+					// Save the plaintext via the new Vault interface to migrate it
+					_ = v.Save(key, plaintext)
+					_ = legacyDeleteFromCredentialManager() // <-- Clean up old key!
+					return plaintext, nil
+				}
+			}
+			return nil, ErrKeyNotFound
+		}
 		if os.IsNotExist(err) {
 			return nil, ErrKeyNotFound
 		}
@@ -56,12 +75,80 @@ func (v *windowsVault) Load(key string) ([]byte, error) {
 }
 
 func (v *windowsVault) Delete(key string) error {
+	if key == "master" {
+		// Attempt to delete from legacy credential manager just in case
+		_ = legacyDeleteFromCredentialManager()
+	}
 	path := filepath.Join(v.storePath, key+".dat")
 	err := os.Remove(path)
 	if os.IsNotExist(err) {
 		return nil // idempotent
 	}
 	return err
+}
+
+// ── Legacy V1 Credential Manager Support ───────────────────────
+
+const legacyCredentialName = "Waddle_Encryption_Key"
+
+var (
+	advapi32        = windows.NewLazySystemDLL("advapi32.dll")
+	procCredReadW   = advapi32.NewProc("CredReadW")
+	procCredDeleteW = advapi32.NewProc("CredDeleteW")
+	procCredFree    = advapi32.NewProc("CredFree")
+)
+
+type credential struct {
+	Flags              uint32
+	Type               uint32
+	TargetName         *uint16
+	Comment            *uint16
+	LastWritten        windows.Filetime
+	CredentialBlobSize uint32
+	CredentialBlob     *byte
+	Persist            uint32
+	AttributeCount     uint32
+	Attributes         uintptr
+	TargetAlias        *uint16
+	UserName           *uint16
+}
+
+func legacyReadFromCredentialManager() ([]byte, error) {
+	targetName, err := windows.UTF16PtrFromString(legacyCredentialName)
+	if err != nil {
+		return nil, err
+	}
+	var pcred *credential
+	ret, _, err := procCredReadW.Call(
+		uintptr(unsafe.Pointer(targetName)),
+		1, // CRED_TYPE_GENERIC
+		0,
+		uintptr(unsafe.Pointer(&pcred)),
+	)
+	if ret == 0 {
+		return nil, fmt.Errorf("CredReadW failed: %w", err)
+	}
+	defer procCredFree.Call(uintptr(unsafe.Pointer(pcred)))
+
+	result := make([]byte, pcred.CredentialBlobSize)
+	copy(result, unsafe.Slice(pcred.CredentialBlob, pcred.CredentialBlobSize))
+	return result, nil
+}
+
+func legacyDeleteFromCredentialManager() error {
+	targetName, err := windows.UTF16PtrFromString(legacyCredentialName)
+	if err != nil {
+		return err
+	}
+	ret, _, err := procCredDeleteW.Call(
+		uintptr(unsafe.Pointer(targetName)),
+		1, // CRED_TYPE_GENERIC
+		0,
+	)
+	if ret == 0 {
+		return fmt.Errorf("CredDeleteW failed: %w", err)
+	}
+	return nil
 }
 
 // dpapiEncrypt encrypts data using Windows DPAPI (CryptProtectData).

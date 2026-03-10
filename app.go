@@ -84,7 +84,9 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.pipeline != nil {
 		a.pipeline.Stop()
 	}
-	// Platform Stop is called by pipeline.Stop() — no double-stop needed
+	if a.plat != nil {
+		a.plat.Close()
+	}
 	if a.synthWorker != nil {
 		a.synthWorker.Close()
 	}
@@ -95,30 +97,16 @@ func (a *App) shutdown(ctx context.Context) {
 
 // ── Wails-bound methods (auto-generates JS bindings) ────────────────
 
-// SessionInfo is a simplified session for the frontend.
-type SessionInfo struct {
-	Date          string `json:"date"`
-	CustomTitle   string `json:"customTitle"`
-	AppCount      int    `json:"appCount"`
-}
-
 // GetSessions returns all sessions for the Memory view.
-func (a *App) GetSessions() ([]SessionInfo, error) {
+func (a *App) GetSessions() ([]storage.Session, error) {
 	if a.storage == nil {
-		return []SessionInfo{}, nil
+		return []storage.Session{}, nil
 	}
 	sessions, _, err := a.storage.ListSessions(1, 100)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]SessionInfo, len(sessions))
-	for i, s := range sessions {
-		result[i] = SessionInfo{
-			Date:        s.Date,
-			CustomTitle: s.CustomTitle,
-		}
-	}
-	return result, nil
+	return sessions, nil
 }
 
 // AppDetail is a simplified app activity for the frontend.
