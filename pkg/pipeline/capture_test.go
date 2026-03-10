@@ -8,7 +8,7 @@ import (
 
 // TestPipelineCreation tests basic pipeline creation and cleanup
 func TestPipelineCreation(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestPipelineCreation(t *testing.T) {
 
 // TestPipelineDoubleStart tests double start protection
 func TestPipelineDoubleStart(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestPipelineDoubleStart(t *testing.T) {
 
 // TestPipelineBackpressure tests backpressure handling
 func TestPipelineBackpressure(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestCaptureSourceTypes(t *testing.T) {
 
 // TestPipelineETWFallback tests ETW fallback mode detection
 func TestPipelineETWFallback(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestPipelineETWFallback(t *testing.T) {
 
 // TestOCRBatchProcessing tests OCR batch processing logic
 func TestOCRBatchProcessing(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestOCRBatchProcessing(t *testing.T) {
 
 // TestPipelineChannelBuffers tests channel buffer access
 func TestPipelineChannelBuffers(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -243,7 +243,7 @@ func TestPipelineChannelBuffers(t *testing.T) {
 
 // BenchmarkPipelineBackpressure benchmarks backpressure handling
 func BenchmarkPipelineBackpressure(b *testing.B) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		b.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -268,7 +268,7 @@ func BenchmarkPipelineBackpressure(b *testing.B) {
 
 // BenchmarkOCRBatchProcessing benchmarks OCR batch processing
 func BenchmarkOCRBatchProcessing(b *testing.B) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		b.Fatalf("Failed to create pipeline: %v", err)
 	}

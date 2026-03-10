@@ -1,4 +1,4 @@
-# Waddle — AI-Powered Second Brain
+# Waddle v2 — AI-Powered Second Brain
 
 A **Windows desktop application** that silently captures your activity (focused windows, clipboard, and visible text), synthesizes daily sessions, and presents an intelligent interface to refine those into durable knowledge. Privacy-first and fully local.
 
@@ -15,7 +15,7 @@ Waddle implements a **four-layer autonomous agent architecture**
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         WADDLE APPLICATION                           │
-│  Electron + React Frontend • Go Backend API • AI Reasoning Engine   │
+│  Wails + Svelte Frontend • Go Backend API • AI Reasoning Engine      │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -50,7 +50,7 @@ Waddle implements a **four-layer autonomous agent architecture**
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  INFRASTRUCTURE LAYER                                                │
-│  ├─ MR-react-memory-dashboard (UI Components)                     │
+│  ├─ MR-svelte-memory-dashboard (UI Components)                    │
 │  ├─ MR-go-retention-manager (Data Lifecycle)                      │
 │  ├─ MR-go-sqlite-migrator (Schema Management)                     │
 │  └─ MR-win-dpapi-vault (Encryption & Security)                    │
@@ -116,17 +116,14 @@ High-performance semantic search:
 
 **Benchmarks**: 1,148 vector searches/second, P99 <20ms on 50k vectors
 
-### 🎨 Interface Layer (MR-react-memory-dashboard)
+### 🎨 Interface Layer (MR-svelte-memory-dashboard)
 
-Production-grade React template:
+Production-grade Svelte template:
 
-- React 19.2 + Vite + Tailwind CSS
-- Radix UI component library
-- TipTap rich text editor
-- Recharts analytics
+- Svelte 5 + Vite + Vanilla CSS
 - Timeline + card-based views
 - Global search (Ctrl+K)
-- Light/dark theme support
+- Dark theme support (Glassmorphism)
 
 ### 🔒 Security Layer (MR-win-dpapi-vault)
 
@@ -164,12 +161,11 @@ ollama pull gemma2:2b  # or llama3, mistral, etc.
 # Clone
 git clone https://github.com/eequaled/waddle.git && cd waddle
 
-# Backend (Go)
-go build -o waddle-backend.exe
+# Development
+wails dev
 
-# Frontend (React + Electron)
-cd frontend && npm install && npm run build && cd ..
-cd electron && npm install && npm run build:win
+# Build (Native Executable)
+wails build
 ```
 
 ## Configuration
@@ -256,19 +252,13 @@ if (event.app === "Slack" && event.duration > 1800) {
 
 ### Project Structure
 ```
-waddle/
-├── main.go                 # Backend entry point
+├── frontend/               # Svelte dashboard
+├── build/                  # Wails build output
+├── main.go                 # Application entry point
+├── app.go                  # Subsystem orchestration
+├── wails.json              # Wails configuration
 ├── pkg/
-│   ├── ai/                 # MR-go-ollama-client integration
-│   ├── capture/            # MR-win-activity-pipeline wrapper
-│   ├── content/            # Clipboard & text processing
-│   ├── ocr/                # Tesseract OCR
-│   ├── processing/         # Session synthesis
-│   ├── server/             # HTTP API (port 8080)
-│   ├── storage/            # SQLite persistence
-│   └── tracker/            # Window focus tracking
-├── frontend/               # React dashboard
-├── electron/               # Electron wrapper
+│   ├── platform/           # Platform abstraction (ETW/UIA)
 └── profile/                # Default assets
 ```
 

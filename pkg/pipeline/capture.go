@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"waddle/pkg/capture/uia"
+	"waddle/pkg/platform"
 	"waddle/pkg/storage"
-	"waddle/pkg/tracker/etw"
 )
 
 // CaptureSource indicates where the activity data came from
@@ -35,9 +35,9 @@ type ActivityBlock struct {
 	StructuredData bool // True if data came from UIA, false if from OCR
 }
 
-// Pipeline orchestrates the hybrid capture pipeline: ETW → UIA → OCR
+// Pipeline orchestrates the hybrid capture pipeline: Tracker → UIA → OCR
 type Pipeline struct {
-	etwConsumer    *etw.Consumer
+	tracker        platform.WindowTracker
 	uiaReader      *uia.Reader
 	storage        interface{} // Storage engine interface
 	ctx            context.Context
@@ -65,14 +65,20 @@ const (
 )
 
 // NewPipeline creates a new hybrid capture pipeline
-func NewPipeline(storage interface{}) (*Pipeline, error) {
+func NewPipeline(storage interface{}, tracker ...platform.WindowTracker) (*Pipeline, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	
-	// Create ETW consumer
-	etwConsumer, err := etw.NewConsumer()
-	if err != nil {
-		// ETW failed but consumer is in fallback mode - this is OK
-		// Continue with polling mode
+	var windowTracker platform.WindowTracker
+	if len(tracker) > 0 && tracker[0] != nil {
+		windowTracker = tracker[0]
+	} else {
+		// Default to Windows tracker if on Windows, otherwise stub
+		var err error
+		windowTracker, err = platform.NewWindowTracker()
+		if err != nil {
+			// If creation fails, we might be in fallback mode or on wrong platform
+			// platform.NewWindowTracker should return a stub if not on Windows
+		}
 	}
 	
 	// Create UIA reader
@@ -83,7 +89,7 @@ func NewPipeline(storage interface{}) (*Pipeline, error) {
 	}
 	
 	p := &Pipeline{
-		etwConsumer:    etwConsumer,
+		tracker:        windowTracker,
 		uiaReader:      uiaReader,
 		storage:        storage,
 		ctx:            ctx,
@@ -104,10 +110,10 @@ func (p *Pipeline) Start() error {
 		return fmt.Errorf("pipeline already running")
 	}
 	
-	// Start ETW consumer
-	err := p.etwConsumer.Start()
-	if err != nil && !p.etwConsumer.IsFallbackMode() {
-		return fmt.Errorf("failed to start ETW consumer: %w", err)
+	// Start window tracker
+	err := p.tracker.Start(p.ctx)
+	if err != nil && !p.tracker.IsFallbackMode() {
+		return fmt.Errorf("failed to start window tracker: %w", err)
 	}
 	
 	// Start pipeline workers
@@ -129,10 +135,10 @@ func (p *Pipeline) etwEventProcessor() {
 		case <-p.ctx.Done():
 			return
 			
-		case focusEvent := <-p.etwConsumer.FocusEvents():
-			// Create activity block from ETW event
+		case focusEvent := <-p.tracker.FocusEvents():
+			// Create activity block from Tracker event
 			activity := &ActivityBlock{
-				Timestamp:     focusEvent.Timestamp,
+				Timestamp:     time.Unix(0, focusEvent.Timestamp),
 				WindowHandle:  focusEvent.WindowHandle,
 				ProcessID:     focusEvent.ProcessID,
 				ProcessName:   focusEvent.ProcessName,
@@ -163,7 +169,9 @@ func (p *Pipeline) uiaProcessor() {
 				// UIA extraction failed - send to OCR batch
 				activity.StructuredData = false
 				activity.CaptureSource = CaptureSourceOCR
-				activity.Metadata["uia_error"] = err.Error()
+				if err != nil {
+					activity.Metadata["uia_error"] = err.Error()
+				}
 				p.sendToOCRBatch(activity)
 				continue
 			}
@@ -324,13 +332,13 @@ func (p *Pipeline) IsRunning() bool {
 	return p.running
 }
 
-// IsETWFallbackMode returns true if ETW is in fallback mode
+// IsETWFallbackMode returns true if tracker is in fallback mode
 func (p *Pipeline) IsETWFallbackMode() bool {
-	return p.etwConsumer.IsFallbackMode()
+	return p.tracker.IsFallbackMode()
 }
 
-// ProcessFocusEvent handles ETW focus event with backpressure
-func (p *Pipeline) ProcessFocusEvent(event etw.FocusEvent) error {
+// ProcessFocusEvent handles tracker focus event with backpressure
+func (p *Pipeline) ProcessFocusEvent(event platform.FocusEvent) error {
 	// Create session for today's date if it doesn't exist
 	dateStr := time.Now().Format("2006-01-02")
 	if storageEngine, ok := p.storage.(*storage.StorageEngine); ok {
@@ -345,9 +353,9 @@ func (p *Pipeline) ProcessFocusEvent(event etw.FocusEvent) error {
 		}(dateStr)
 	}
 	
-	// Create activity block from ETW event
+	// Create activity block from focus event
 	activity := &ActivityBlock{
-		Timestamp:     event.Timestamp,
+		Timestamp:     time.Unix(0, event.Timestamp),
 		WindowHandle:  event.WindowHandle,
 		ProcessID:     event.ProcessID,
 		ProcessName:   event.ProcessName,
@@ -376,11 +384,11 @@ func (p *Pipeline) Stop() error {
 	// Wait for all workers to finish
 	p.wg.Wait()
 	
-	// Stop ETW consumer
-	if p.etwConsumer != nil {
-		err := p.etwConsumer.Close()
+	// Stop window tracker
+	if p.tracker != nil {
+		err := p.tracker.Stop()
 		if err != nil {
-			return fmt.Errorf("failed to close ETW consumer: %w", err)
+			return fmt.Errorf("failed to stop window tracker: %w", err)
 		}
 	}
 	
