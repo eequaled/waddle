@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"sync/atomic"
+	"time"
 
 	"waddle/pkg/infra/config"
 	"waddle/pkg/pipeline"
@@ -15,13 +15,13 @@ import (
 
 // App struct
 type App struct {
-	ctx           context.Context
-	cfg           config.Config
-	storage       *storage.StorageEngine
-	tracker       platform.WindowTracker
-	pipeline      *pipeline.Pipeline
-	synthWorker   *synthesis.Worker
-	isPaused      *atomic.Bool
+	ctx         context.Context
+	cfg         config.Config
+	storage     *storage.StorageEngine
+	plat        platform.Platform
+	pipeline    *pipeline.Pipeline
+	synthWorker *synthesis.Worker
+	isPaused    *atomic.Bool
 }
 
 // NewApp creates a new App application struct
@@ -41,20 +41,19 @@ func (a *App) startup(ctx context.Context) {
 	a.storage = storage.NewStorageEngine(storageConfig)
 	if err := a.storage.Initialize(); err != nil {
 		log.Printf("Error initializing storage engine: %v\n", err)
-		// Storage is critical — zero it out so downstream nil-checks work
 		a.storage = nil
 	}
 
-	// 2. Initialize Platform Tracker
-	tracker, err := platform.NewWindowTracker()
+	// 2. Initialize full Platform (tracker + UIA + screenshot + secrets)
+	plat, err := platform.NewPlatform(&a.cfg)
 	if err != nil {
-		log.Printf("Error initializing platform tracker: %v\n", err)
+		log.Printf("Error initializing platform: %v\n", err)
 	}
-	a.tracker = tracker
+	a.plat = plat
 
-	// 3. Initialize Capture Pipeline (requires storage, tracker is optional)
-	if a.storage != nil {
-		p, err := pipeline.NewPipeline(a.storage, a.tracker)
+	// 3. Initialize Capture Pipeline (requires storage + platform)
+	if a.storage != nil && a.plat != nil {
+		p, err := pipeline.NewPipeline(a.storage, a.plat)
 		if err != nil {
 			log.Printf("Error initializing capture pipeline: %v\n", err)
 		} else {
@@ -85,9 +84,7 @@ func (a *App) shutdown(ctx context.Context) {
 	if a.pipeline != nil {
 		a.pipeline.Stop()
 	}
-	if a.tracker != nil {
-		a.tracker.Stop()
-	}
+	// Platform Stop is called by pipeline.Stop() — no double-stop needed
 	if a.synthWorker != nil {
 		a.synthWorker.Close()
 	}
@@ -96,7 +93,93 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 }
 
-// Greet returns a greeting for the given name
+// ── Wails-bound methods (auto-generates JS bindings) ────────────────
+
+// SessionInfo is a simplified session for the frontend.
+type SessionInfo struct {
+	Date          string `json:"date"`
+	CustomTitle   string `json:"customTitle"`
+	AppCount      int    `json:"appCount"`
+}
+
+// GetSessions returns all sessions for the Memory view.
+func (a *App) GetSessions() ([]SessionInfo, error) {
+	if a.storage == nil {
+		return []SessionInfo{}, nil
+	}
+	sessions, _, err := a.storage.ListSessions(1, 100)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]SessionInfo, len(sessions))
+	for i, s := range sessions {
+		result[i] = SessionInfo{
+			Date:        s.Date,
+			CustomTitle: s.CustomTitle,
+		}
+	}
+	return result, nil
+}
+
+// AppDetail is a simplified app activity for the frontend.
+type AppDetail struct {
+	AppName    string `json:"appName"`
+	BlockCount int    `json:"blockCount"`
+}
+
+// GetAppDetails returns app activity summaries for a given date.
+func (a *App) GetAppDetails(date string) ([]AppDetail, error) {
+	if a.storage == nil {
+		return []AppDetail{}, nil
+	}
+	session, err := a.storage.GetSession(date)
+	if err != nil {
+		return nil, err
+	}
+	if session == nil {
+		return []AppDetail{}, nil
+	}
+	// Return basic session info — detailed app breakdown requires
+	// additional storage methods that will be added in future phases.
+	return []AppDetail{
+		{AppName: "Session: " + date, BlockCount: 0},
+	}, nil
+}
+
+// GetCaptureStatus returns the current capture pipeline status.
+func (a *App) GetCaptureStatus() map[string]interface{} {
+	if a.pipeline == nil {
+		return map[string]interface{}{
+			"running": false,
+			"source":  "none",
+		}
+	}
+	return a.pipeline.GetPipelineStats()
+}
+
+// GetHealthStatus returns storage health information.
+func (a *App) GetHealthStatus() map[string]interface{} {
+	if a.storage == nil {
+		return map[string]interface{}{"status": "unavailable"}
+	}
+	health, err := a.storage.HealthCheck()
+	if err != nil {
+		return map[string]interface{}{"status": "error", "error": err.Error()}
+	}
+	return map[string]interface{}{
+		"status":    health.Status,
+		"timestamp": health.Timestamp.Format(time.RFC3339),
+	}
+}
+
+// ToggleCapture pauses or resumes the capture pipeline.
+func (a *App) ToggleCapture(paused bool) error {
+	a.isPaused.Store(paused)
+	// Full pause/resume implementation will come with hot tier integration.
+	return nil
+}
+
+// Greet returns a greeting for the given name (kept for backward compat).
 func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, Waddle v2 is active!", name)
+	return "Hello " + name + ", Waddle v2 is active!"
 }

@@ -2,6 +2,8 @@ package platform
 
 import (
 	"testing"
+
+	"waddle/pkg/infra/config"
 )
 
 func TestTrackerInterfaceCompliance(t *testing.T) {
@@ -32,3 +34,21 @@ func TestNewWindowTracker(t *testing.T) {
 	}
 }
 
+func TestPlatformInterfaceCompliance(t *testing.T) {
+	cfg := config.DefaultConfig()
+	plat, err := NewPlatform(&cfg)
+	if err != nil {
+		t.Logf("Platform creation info: %v", err)
+	}
+	if plat == nil && err == nil {
+		t.Errorf("NewPlatform returned both nil plat and nil err")
+	}
+	if plat != nil {
+		if plat.FocusEvents() == nil {
+			t.Errorf("Platform.FocusEvents() should not be nil")
+		}
+		if plat.ProcessEvents() == nil {
+			t.Errorf("Platform.ProcessEvents() should not be nil")
+		}
+	}
+}
