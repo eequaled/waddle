@@ -14,7 +14,7 @@ import (
 // **Validates: Requirements 4.2, 4.3**
 func TestEncryptionRoundTrip(t *testing.T) {
 	// Initialize encryption manager for testing
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(t.TempDir())
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestEncryptionRoundTrip(t *testing.T) {
 
 // TestEncryptionEdgeCases tests specific edge cases for encryption.
 func TestEncryptionEdgeCases(t *testing.T) {
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(t.TempDir())
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}

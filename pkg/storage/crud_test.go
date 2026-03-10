@@ -16,7 +16,7 @@ func setupTestDB(t *testing.T) (*SessionManager, func()) {
 		t.Fatalf("Failed to create temp directory: %v", err)
 	}
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		os.RemoveAll(tempDir)
 		t.Fatalf("Failed to initialize encryption: %v", err)

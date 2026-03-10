@@ -23,7 +23,7 @@ func TestSessionManagerInitialization(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	// Initialize encryption manager
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestSchemaCreation(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestSchemaVersion(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestIntegrityCheck(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -154,7 +154,7 @@ func TestForeignKeyConstraints(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestWALMode(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -255,7 +255,7 @@ func TestIndexesExist(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestFTS5Triggers(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -448,7 +448,7 @@ func TestTriggersExist(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -492,7 +492,7 @@ func TestPropertyFullTextSearchCoverage(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -615,7 +615,7 @@ func TestPropertyFullTextSearchPagination(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -731,7 +731,7 @@ func TestPropertySemanticSearchDateFiltering(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
@@ -903,7 +903,7 @@ func TestPropertySearchMatchesEntities(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	em := NewEncryptionManager()
+	em := NewEncryptionManager(tempDir)
 	if err := em.InitializeKey(); err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
 	}
