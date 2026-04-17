@@ -31,7 +31,7 @@ func (se *StorageEngine) Initialize() error {
 	}
 
 	// Initialize encryption manager first (needed by others)
-	se.encryptionMgr = NewEncryptionManager()
+	se.encryptionMgr = NewEncryptionManager(se.config.DataDir)
 	if err := se.encryptionMgr.InitializeKey(); err != nil {
 		return NewStorageError(ErrEncryption, "failed to initialize encryption", err)
 	}

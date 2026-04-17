@@ -15,7 +15,7 @@ func TestSchemaExtensions(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	
 	config := DefaultStorageConfig(tempDir)
-	encryptionMgr := NewEncryptionManager()
+	encryptionMgr := NewEncryptionManager(tempDir)
 	err = encryptionMgr.InitializeKey()
 	if err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
@@ -145,7 +145,7 @@ func TestSynthesisColumnsDefaults(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	
 	config := DefaultStorageConfig(tempDir)
-	encryptionMgr := NewEncryptionManager()
+	encryptionMgr := NewEncryptionManager(tempDir)
 	err = encryptionMgr.InitializeKey()
 	if err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
@@ -203,7 +203,7 @@ func TestCaptureColumnsDefaults(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	
 	config := DefaultStorageConfig(tempDir)
-	encryptionMgr := NewEncryptionManager()
+	encryptionMgr := NewEncryptionManager(tempDir)
 	err = encryptionMgr.InitializeKey()
 	if err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
@@ -274,7 +274,7 @@ func TestKnowledgeCardsCRUD(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 	
 	config := DefaultStorageConfig(tempDir)
-	encryptionMgr := NewEncryptionManager()
+	encryptionMgr := NewEncryptionManager(tempDir)
 	err = encryptionMgr.InitializeKey()
 	if err != nil {
 		t.Fatalf("Failed to initialize encryption: %v", err)
