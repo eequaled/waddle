@@ -3,23 +3,20 @@ package synthesis
 import (
 	"regexp"
 	"strings"
+
+	"waddle/pkg/types"
 )
 
-// Entity represents an extracted entity
-type Entity struct {
-	Value string     `json:"value"`
-	Type  EntityType `json:"type"`
-	Count int        `json:"count"`
-}
+// Re-export types from the canonical source for local use.
+type EntityType = types.EntityType
+type Entity = types.Entity
 
-// EntityType represents the type of entity
-type EntityType string
-
+// Canonical entity type constants re-exported for backward compatibility.
 const (
-	EntityTypeJIRA    EntityType = "jira"
-	EntityTypeHashtag EntityType = "hashtag"
-	EntityTypeMention EntityType = "mention"
-	EntityTypeURL     EntityType = "url"
+	EntityTypeJiraTicket = types.EntityTypeJiraTicket
+	EntityTypeHashtag    = types.EntityTypeHashtag
+	EntityTypeMention    = types.EntityTypeMention
+	EntityTypeURL        = types.EntityTypeURL
 )
 
 // Extractor extracts entities from text using regex patterns
@@ -31,10 +28,10 @@ type Extractor struct {
 func NewExtractor() *Extractor {
 	return &Extractor{
 		patterns: map[EntityType]*regexp.Regexp{
-			EntityTypeJIRA:    regexp.MustCompile(`[A-Z]{2,10}-\d+`),
-			EntityTypeHashtag: regexp.MustCompile(`#[a-zA-Z0-9_]+`),
-			EntityTypeMention: regexp.MustCompile(`@[a-zA-Z0-9_]+`),
-			EntityTypeURL:     regexp.MustCompile(`https?://[^\s]+`),
+			EntityTypeJiraTicket: regexp.MustCompile(`[A-Z]{2,10}-\d+`),
+			EntityTypeHashtag:    regexp.MustCompile(`#[a-zA-Z0-9_]+`),
+			EntityTypeMention:    regexp.MustCompile(`@[a-zA-Z0-9_]+`),
+			EntityTypeURL:        regexp.MustCompile(`https?://[^\s]+`),
 		},
 	}
 }

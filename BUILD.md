@@ -44,3 +44,11 @@ wails dev
 ## Troubleshooting
 - **ETW Admin Requirements:** The capture pipeline may require running Waddle as an Administrator for ETW tracing.
 - **WebView2 Runtime:** If the app launches to a blank screen, ensure the Microsoft Edge WebView2 Runtime is installed.
+
+## Known Issues
+
+### Go 1.25.6 Compiler ICE
+
+`go build ./...` may hit an internal compiler error (race condition) on Go 1.25.6.
+Workaround: use `go build -p 1 ./...` to serialize compilation.
+This is a known Go toolchain bug and should be fixed in a future release.

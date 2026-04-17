@@ -199,9 +199,9 @@ type DateRange struct {
 
 // Entity represents an extracted entity.
 type Entity struct {
-	Value string `json:"value"`
-	Type  string `json:"type"`
-	Count int    `json:"count"`
+	Value string     `json:"value"`
+	Type  EntityType `json:"type"`
+	Count int        `json:"count"`
 }
 
 // EntityType enumerates entity categories for extraction.

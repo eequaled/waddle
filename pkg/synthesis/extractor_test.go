@@ -23,8 +23,8 @@ func TestExtractor_BasicExtraction(t *testing.T) {
 			name: "JIRA tickets",
 			text: "Working on PROJ-123 and TEAM-456",
 			expected: []Entity{
-				{Type: EntityTypeJIRA, Value: "PROJ-123", Count: 1},
-				{Type: EntityTypeJIRA, Value: "TEAM-456", Count: 1},
+				{Type: EntityTypeJiraTicket, Value: "PROJ-123", Count: 1},
+				{Type: EntityTypeJiraTicket, Value: "TEAM-456", Count: 1},
 			},
 		},
 		{
@@ -55,7 +55,7 @@ func TestExtractor_BasicExtraction(t *testing.T) {
 			name: "Mixed entities",
 			text: "PROJ-123 #bug @dev https://example.com/tickets",
 			expected: []Entity{
-				{Type: EntityTypeJIRA, Value: "PROJ-123", Count: 1},
+				{Type: EntityTypeJiraTicket, Value: "PROJ-123", Count: 1},
 				{Type: EntityTypeHashtag, Value: "#bug", Count: 1},
 				{Type: EntityTypeMention, Value: "@dev", Count: 1},
 				{Type: EntityTypeURL, Value: "https://example.com/tickets", Count: 1},
@@ -103,7 +103,7 @@ func TestExtractor_BasicExtraction(t *testing.T) {
 
 func TestExtractor_JSONRoundTrip(t *testing.T) {
 	original := []Entity{
-		{Type: EntityTypeJIRA, Value: "PROJ-123", Count: 2},
+		{Type: EntityTypeJiraTicket, Value: "PROJ-123", Count: 2},
 		{Type: EntityTypeHashtag, Value: "#test", Count: 1},
 		{Type: EntityTypeMention, Value: "@user", Count: 3},
 		{Type: EntityTypeURL, Value: "https://example.com", Count: 1},
@@ -156,7 +156,7 @@ func TestProperty_EntityExtractionWithDeduplication(t *testing.T) {
 				if len(ticket) >= 3 {
 					validTicket := strings.ToUpper(ticket[:2]) + "-123"
 					textParts = append(textParts, validTicket, validTicket)
-					expectedCounts[string(EntityTypeJIRA)+":"+strings.ToLower(validTicket)] += 2
+					expectedCounts[string(EntityTypeJiraTicket)+":"+strings.ToLower(validTicket)] += 2
 				}
 			}
 
@@ -241,7 +241,7 @@ func TestProperty_EntityJSONStorageRoundTrip(t *testing.T) {
 				var entityType EntityType
 				switch data.Type % 4 {
 				case 0:
-					entityType = EntityTypeJIRA
+					entityType = EntityTypeJiraTicket
 				case 1:
 					entityType = EntityTypeHashtag
 				case 2:
