@@ -39,6 +39,7 @@ type StorageEngineInterface interface {
 	// Activity operations
 	AddActivityBlock(sessionDate, appName string, block *ActivityBlock) error
 	GetActivityBlocks(sessionDate, appName string) ([]ActivityBlock, error)
+	GetSessionAppActivities(sessionDate string) ([]AppActivity, error)
 
 	// Chat operations
 	AddChat(sessionDate string, chat *ChatMessage) error

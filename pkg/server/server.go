@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"waddle/pkg/storage"
 	"io"
 	"net/http"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"waddle/pkg/storage"
 )
 
 type Server struct {
@@ -125,7 +125,7 @@ func (s *Server) handleKnowledgeCards(w http.ResponseWriter, r *http.Request) {
 
 	// Get query parameters
 	status := r.URL.Query().Get("status") // Optional filter by status
-	limit := 50 // Default limit
+	limit := 50                           // Default limit
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 1000 {
 			limit = parsed
@@ -341,7 +341,7 @@ func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
 	if len(parts) == 1 && parts[0] != "" {
 		// List Apps for Date - use StorageEngine to get activity blocks
 		date := parts[0]
-		
+
 		// Verify session exists
 		_, err := s.storageEngine.GetSession(date)
 		if err != nil {
@@ -353,10 +353,19 @@ func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// For now, return empty list since we need to implement app listing
-		// This would require querying the database for app activities
-		// TODO: Implement proper app listing from database
-		json.NewEncoder(w).Encode([]string{})
+		activities, err := s.storageEngine.GetSessionAppActivities(date)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		appNames := make([]string, 0, len(activities))
+		for _, activity := range activities {
+			appNames = append(appNames, activity.AppName)
+		}
+		sort.Strings(appNames)
+
+		json.NewEncoder(w).Encode(appNames)
 		return
 	}
 
@@ -379,7 +388,53 @@ func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
 			CustomTitle:     session.CustomTitle,
 			CustomSummary:   session.CustomSummary,
 			OriginalSummary: session.OriginalSummary,
-			ManualNotes:     []ManualNote{}, // Initialize as empty slice
+			ManualNotes:     []ManualNote{},
+		}
+
+		rows, err := s.storageEngine.DB().Query(`
+			SELECT id, content, created_at, updated_at
+			FROM manual_notes
+			WHERE session_id = ?
+			ORDER BY created_at ASC
+		`, session.ID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var noteID int64
+			var content string
+			var createdAtRaw string
+			var updatedAtRaw string
+			if err := rows.Scan(&noteID, &content, &createdAtRaw, &updatedAtRaw); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			createdAt, err := normalizeAPITimestamp(createdAtRaw)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			updatedAt, err := normalizeAPITimestamp(updatedAtRaw)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			metadata.ManualNotes = append(metadata.ManualNotes, ManualNote{
+				ID:        strconv.FormatInt(noteID, 10),
+				Content:   content,
+				CreatedAt: createdAt,
+				UpdatedAt: updatedAt,
+			})
+		}
+		if err := rows.Err(); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
 		json.NewEncoder(w).Encode(metadata)
@@ -497,7 +552,94 @@ func (s *Server) handleSessionUpdate(w http.ResponseWriter, r *http.Request, dat
 		return
 	}
 
+	if err := s.upsertManualNotes(session.ID, metadata.ManualNotes); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// upsertManualNotes replaces all manual notes for a session with the provided list.
+func (s *Server) upsertManualNotes(sessionID int64, notes []ManualNote) error {
+	tx, err := s.storageEngine.DB().Begin()
+	if err != nil {
+		return err
+	}
+
+	rollback := func(cause error) error {
+		_ = tx.Rollback()
+		return cause
+	}
+
+	if _, err := tx.Exec("DELETE FROM manual_notes WHERE session_id = ?", sessionID); err != nil {
+		return rollback(err)
+	}
+	insertSQL := `
+		INSERT INTO manual_notes (session_id, content, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+	`
+
+	for _, note := range notes {
+		if strings.TrimSpace(note.Content) == "" {
+			continue
+		}
+
+		createdAt := strings.TrimSpace(note.CreatedAt)
+		if createdAt == "" {
+			createdAt = time.Now().UTC().Format(time.RFC3339)
+		} else {
+			parsed, err := normalizeAPITimestamp(createdAt)
+			if err != nil {
+				return rollback(err)
+			}
+			createdAt = parsed
+		}
+
+		updatedAt := strings.TrimSpace(note.UpdatedAt)
+		if updatedAt == "" {
+			updatedAt = createdAt
+		} else {
+			parsed, err := normalizeAPITimestamp(updatedAt)
+			if err != nil {
+				return rollback(err)
+			}
+			updatedAt = parsed
+		}
+
+		if _, err := tx.Exec(insertSQL, sessionID, note.Content, createdAt, updatedAt); err != nil {
+			return rollback(err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+func normalizeAPITimestamp(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+
+	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return t.UTC().Format(time.RFC3339), nil
+	}
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t.UTC().Format(time.RFC3339), nil
+	}
+
+	sqliteLayouts := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04:05.999999999-07:00",
+		"2006-01-02 15:04:05.999999999",
+	}
+	for _, layout := range sqliteLayouts {
+		if t, err := time.Parse(layout, raw); err == nil {
+			return t.UTC().Format(time.RFC3339), nil
+		}
+	}
+
+	return "", fmt.Errorf("invalid timestamp format: %s", raw)
 }
 
 // DELETE /api/sessions/{date} -> Deletes session
@@ -549,7 +691,7 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 				Read:       notif.Read,
 				SessionRef: notif.SessionRef,
 			}
-			
+
 			// Parse metadata JSON string to map
 			if notif.Metadata != "" {
 				var metadata map[string]string
@@ -557,7 +699,7 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 					apiNotif.Metadata = metadata
 				}
 			}
-			
+
 			apiNotifications = append(apiNotifications, apiNotif)
 		}
 
@@ -582,7 +724,7 @@ func (s *Server) handleNotifications(w http.ResponseWriter, r *http.Request) {
 			Read:       false,
 			SessionRef: newNotif.SessionRef,
 		}
-		
+
 		// Convert metadata map to JSON string
 		if newNotif.Metadata != nil {
 			metadataBytes, err := json.Marshal(newNotif.Metadata)

@@ -30,3 +30,4 @@ sessions/*
 profile/*
 !profile/default_*.png
 !profile/.gitkeep
+WADDLE_STATUS_REPORT.md

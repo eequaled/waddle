@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,6 +58,14 @@ func (se *StorageEngine) Initialize() error {
 	return nil
 }
 
+// DB returns the underlying SQLite connection for compatibility paths.
+func (se *StorageEngine) DB() *sql.DB {
+	if se.sessionMgr == nil {
+		return nil
+	}
+	return se.sessionMgr.DB()
+}
+
 // Close closes all storage components and cleans up resources.
 func (se *StorageEngine) Close() error {
 	var lastErr error
@@ -103,7 +112,7 @@ func (se *StorageEngine) GetSession(date string) (*Session, error) {
 // UpdateSession updates an existing session.
 func (se *StorageEngine) UpdateSession(session *Session) error {
 	session.UpdatedAt = time.Now()
-	
+
 	// Update in database
 	if err := se.sessionMgr.Update(session); err != nil {
 		return err
@@ -186,6 +195,17 @@ func (se *StorageEngine) GetActivityBlocks(sessionDate, appName string) ([]Activ
 	return se.sessionMgr.GetBlocks(session.ID, appName)
 }
 
+// GetSessionAppActivities retrieves app activity summaries for a session.
+func (se *StorageEngine) GetSessionAppActivities(sessionDate string) ([]AppActivity, error) {
+	// Get session to get ID
+	session, err := se.sessionMgr.Get(sessionDate)
+	if err != nil {
+		return nil, err
+	}
+
+	return se.sessionMgr.GetAppActivities(session.ID)
+}
+
 // Chat operations
 
 // AddChat adds a chat message to a session.
@@ -244,7 +264,7 @@ func (se *StorageEngine) Backup() error {
 	// Create backup directory with timestamp
 	timestamp := time.Now().Format("20060102-150405")
 	backupDir := filepath.Join(se.config.DataDir, "backups", timestamp)
-	
+
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
 		return NewStorageError(ErrFileSystem, "failed to create backup directory", err)
 	}
@@ -270,7 +290,7 @@ func (se *StorageEngine) Restore(backupPath string) error {
 	// 2. Stopping current operations
 	// 3. Replacing current data with backup
 	// 4. Reinitializing components
-	
+
 	return NewStorageError(ErrNotImplemented, "restore not yet implemented", nil)
 }
 
@@ -286,7 +306,7 @@ func (se *StorageEngine) HealthCheck() (*HealthStatus, error) {
 	start := time.Now()
 	err := se.sessionMgr.RunIntegrityCheck()
 	latency := time.Since(start).Milliseconds()
-	
+
 	if err != nil {
 		status.Checks["database"] = Check{
 			Status:  HealthStatusUnhealthy,
@@ -305,7 +325,7 @@ func (se *StorageEngine) HealthCheck() (*HealthStatus, error) {
 	start = time.Now()
 	count := se.vectorMgr.Count()
 	latency = time.Since(start).Milliseconds()
-	
+
 	status.Checks["vector_db"] = Check{
 		Status:  HealthStatusHealthy,
 		Latency: latency,
@@ -316,7 +336,7 @@ func (se *StorageEngine) HealthCheck() (*HealthStatus, error) {
 	start = time.Now()
 	stats, err := se.fileMgr.GetStorageStats()
 	latency = time.Since(start).Milliseconds()
-	
+
 	if err != nil {
 		status.Checks["filesystem"] = Check{
 			Status:  HealthStatusDegraded,
@@ -336,6 +356,7 @@ func (se *StorageEngine) HealthCheck() (*HealthStatus, error) {
 
 	return status, nil
 }
+
 // Synthesis operations
 
 // GetPendingSessions returns all sessions pending synthesis in FIFO order.
@@ -359,21 +380,21 @@ func (se *StorageEngine) UpdateSessionSynthesis(sessionID int64, entitiesJSON, s
 func (se *StorageEngine) CreateKnowledgeCard(card *KnowledgeCard) error {
 	card.CreatedAt = time.Now()
 	card.UpdatedAt = time.Now()
-	
+
 	result, err := se.sessionMgr.DB().Exec(`
 		INSERT INTO knowledge_cards (session_id, title, bullets, entities, status, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`, card.SessionID, card.Title, card.Bullets, card.Entities, card.Status, card.CreatedAt, card.UpdatedAt)
-	
+
 	if err != nil {
 		return NewStorageError(ErrDatabase, "failed to create knowledge card", err)
 	}
-	
+
 	id, err := result.LastInsertId()
 	if err != nil {
 		return NewStorageError(ErrDatabase, "failed to get knowledge card ID", err)
 	}
-	
+
 	card.ID = id
 	return nil
 }
@@ -382,7 +403,7 @@ func (se *StorageEngine) CreateKnowledgeCard(card *KnowledgeCard) error {
 func (se *StorageEngine) GetKnowledgeCards(status string, limit int) ([]KnowledgeCard, error) {
 	var query string
 	var args []interface{}
-	
+
 	if status != "" {
 		query = `
 			SELECT id, session_id, title, bullets, entities, status, created_at, updated_at
@@ -401,24 +422,24 @@ func (se *StorageEngine) GetKnowledgeCards(status string, limit int) ([]Knowledg
 		`
 		args = []interface{}{limit}
 	}
-	
+
 	rows, err := se.sessionMgr.DB().Query(query, args...)
 	if err != nil {
 		return nil, NewStorageError(ErrDatabase, "failed to query knowledge cards", err)
 	}
 	defer rows.Close()
-	
+
 	var cards []KnowledgeCard
 	for rows.Next() {
 		var card KnowledgeCard
-		err := rows.Scan(&card.ID, &card.SessionID, &card.Title, &card.Bullets, 
+		err := rows.Scan(&card.ID, &card.SessionID, &card.Title, &card.Bullets,
 			&card.Entities, &card.Status, &card.CreatedAt, &card.UpdatedAt)
 		if err != nil {
 			return nil, NewStorageError(ErrDatabase, "failed to scan knowledge card", err)
 		}
 		cards = append(cards, card)
 	}
-	
+
 	return cards, nil
 }
 
@@ -430,39 +451,39 @@ func (se *StorageEngine) GetKnowledgeCardsBySession(sessionID int64) ([]Knowledg
 		WHERE session_id = ?
 		ORDER BY created_at DESC
 	`, sessionID)
-	
+
 	if err != nil {
 		return nil, NewStorageError(ErrDatabase, "failed to query knowledge cards by session", err)
 	}
 	defer rows.Close()
-	
+
 	var cards []KnowledgeCard
 	for rows.Next() {
 		var card KnowledgeCard
-		err := rows.Scan(&card.ID, &card.SessionID, &card.Title, &card.Bullets, 
+		err := rows.Scan(&card.ID, &card.SessionID, &card.Title, &card.Bullets,
 			&card.Entities, &card.Status, &card.CreatedAt, &card.UpdatedAt)
 		if err != nil {
 			return nil, NewStorageError(ErrDatabase, "failed to scan knowledge card", err)
 		}
 		cards = append(cards, card)
 	}
-	
+
 	return cards, nil
 }
 
 // UpdateKnowledgeCard updates an existing knowledge card.
 func (se *StorageEngine) UpdateKnowledgeCard(card *KnowledgeCard) error {
 	card.UpdatedAt = time.Now()
-	
+
 	_, err := se.sessionMgr.DB().Exec(`
 		UPDATE knowledge_cards 
 		SET title = ?, bullets = ?, entities = ?, status = ?, updated_at = ?
 		WHERE id = ?
 	`, card.Title, card.Bullets, card.Entities, card.Status, card.UpdatedAt, card.ID)
-	
+
 	if err != nil {
 		return NewStorageError(ErrDatabase, "failed to update knowledge card", err)
 	}
-	
+
 	return nil
 }

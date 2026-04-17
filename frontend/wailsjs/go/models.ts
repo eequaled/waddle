@@ -14,6 +14,49 @@ export namespace main {
 	        this.blockCount = source["blockCount"];
 	    }
 	}
+	export class HealthStatusResponse {
+	    status: string;
+	    timestamp?: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HealthStatusResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.timestamp = source["timestamp"];
+	        this.error = source["error"];
+	    }
+	}
+
+}
+
+export namespace pipeline {
+	
+	export class PipelineStats {
+	    running: boolean;
+	    source: string;
+	    etwFallbackMode: boolean;
+	    droppedEvents: number;
+	    activityBufferSize: number;
+	    ocrBufferSize: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PipelineStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.running = source["running"];
+	        this.source = source["source"];
+	        this.etwFallbackMode = source["etwFallbackMode"];
+	        this.droppedEvents = source["droppedEvents"];
+	        this.activityBufferSize = source["activityBufferSize"];
+	        this.ocrBufferSize = source["ocrBufferSize"];
+	    }
+	}
 
 }
 

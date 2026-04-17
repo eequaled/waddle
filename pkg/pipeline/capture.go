@@ -34,6 +34,16 @@ type ActivityBlock struct {
 	StructuredData bool // True if data came from UIA, false if from OCR
 }
 
+// PipelineStats describes capture pipeline runtime status for UI/API consumers.
+type PipelineStats struct {
+	Running            bool   `json:"running"`
+	Source             string `json:"source"`
+	ETWFallbackMode    bool   `json:"etwFallbackMode"`
+	DroppedEvents      int64  `json:"droppedEvents"`
+	ActivityBufferSize int    `json:"activityBufferSize"`
+	OCRBufferSize      int    `json:"ocrBufferSize"`
+}
+
 // Pipeline orchestrates the hybrid capture pipeline: Tracker → UIA → OCR
 type Pipeline struct {
 	plat           platform.Platform
@@ -413,13 +423,26 @@ func (p *Pipeline) processStructuredActivity(activity *ActivityBlock) {
 	activity.Metadata["processing_path"] = "structured_skip_ocr"
 }
 
-// GetPipelineStats returns pipeline statistics
-func (p *Pipeline) GetPipelineStats() map[string]interface{} {
-	return map[string]interface{}{
-		"running":              p.IsRunning(),
-		"etw_fallback_mode":    p.IsETWFallbackMode(),
-		"dropped_events":       p.DroppedEvents(),
-		"activity_buffer_size": len(p.activityBuffer),
-		"ocr_buffer_size":      len(p.ocrBatchBuffer),
+// GetPipelineStats returns pipeline statistics.
+func (p *Pipeline) GetPipelineStats() PipelineStats {
+	running := p.IsRunning()
+	fallback := p.IsETWFallbackMode()
+
+	source := "none"
+	if running {
+		if fallback {
+			source = string(CaptureSourcePolling)
+		} else {
+			source = string(CaptureSourceETW)
+		}
+	}
+
+	return PipelineStats{
+		Running:            running,
+		Source:             source,
+		ETWFallbackMode:    fallback,
+		DroppedEvents:      p.DroppedEvents(),
+		ActivityBufferSize: len(p.activityBuffer),
+		OCRBufferSize:      len(p.ocrBatchBuffer),
 	}
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -128,43 +129,69 @@ func (a *App) GetAppDetails(date string) ([]AppDetail, error) {
 	if a.storage == nil {
 		return []AppDetail{}, nil
 	}
-	session, err := a.storage.GetSession(date)
+	_, err := a.storage.GetSession(date)
+	if err != nil {
+		if storage.IsNotFound(err) {
+			return []AppDetail{}, nil
+		}
+		return nil, err
+	}
+
+	activities, err := a.storage.GetSessionAppActivities(date)
 	if err != nil {
 		return nil, err
 	}
-	if session == nil {
-		return []AppDetail{}, nil
+
+	appDetails := make([]AppDetail, 0, len(activities))
+	for _, activity := range activities {
+		blocks, err := a.storage.GetActivityBlocks(date, activity.AppName)
+		if err != nil {
+			return nil, err
+		}
+
+		appDetails = append(appDetails, AppDetail{
+			AppName:    activity.AppName,
+			BlockCount: len(blocks),
+		})
 	}
-	// Return basic session info — detailed app breakdown requires
-	// additional storage methods that will be added in future phases.
-	return []AppDetail{
-		{AppName: "Session: " + date, BlockCount: 0},
-	}, nil
+
+	sort.Slice(appDetails, func(i, j int) bool {
+		if appDetails[i].BlockCount == appDetails[j].BlockCount {
+			return appDetails[i].AppName < appDetails[j].AppName
+		}
+		return appDetails[i].BlockCount > appDetails[j].BlockCount
+	})
+
+	return appDetails, nil
 }
 
 // GetCaptureStatus returns the current capture pipeline status.
-func (a *App) GetCaptureStatus() map[string]interface{} {
+func (a *App) GetCaptureStatus() pipeline.PipelineStats {
 	if a.pipeline == nil {
-		return map[string]interface{}{
-			"running": false,
-			"source":  "none",
-		}
+		return pipeline.PipelineStats{Running: false, Source: "none"}
 	}
 	return a.pipeline.GetPipelineStats()
 }
 
+// HealthStatusResponse represents backend health status for UI consumers.
+type HealthStatusResponse struct {
+	Status    string `json:"status"`
+	Timestamp string `json:"timestamp,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
 // GetHealthStatus returns storage health information.
-func (a *App) GetHealthStatus() map[string]interface{} {
+func (a *App) GetHealthStatus() HealthStatusResponse {
 	if a.storage == nil {
-		return map[string]interface{}{"status": "unavailable"}
+		return HealthStatusResponse{Status: "unavailable"}
 	}
 	health, err := a.storage.HealthCheck()
 	if err != nil {
-		return map[string]interface{}{"status": "error", "error": err.Error()}
+		return HealthStatusResponse{Status: "error", Error: err.Error()}
 	}
-	return map[string]interface{}{
-		"status":    health.Status,
-		"timestamp": health.Timestamp.Format(time.RFC3339),
+	return HealthStatusResponse{
+		Status:    health.Status,
+		Timestamp: health.Timestamp.Format(time.RFC3339),
 	}
 }
 

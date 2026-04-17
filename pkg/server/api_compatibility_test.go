@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"waddle/pkg/storage"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
+	"waddle/pkg/storage"
 
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
@@ -23,7 +23,7 @@ func TestAPIResponseCompatibility(t *testing.T) {
 	// Setup test environment
 	tempDir := t.TempDir()
 	storageDir := filepath.Join(tempDir, ".waddle")
-	
+
 	// Initialize storage engine
 	config := storage.DefaultStorageConfig(storageDir)
 	storageEngine := storage.NewStorageEngine(config)
@@ -44,7 +44,7 @@ func TestAPIResponseCompatibility(t *testing.T) {
 			// Create a test session
 			testDate := "2024-01-15"
 			storageEngine.DeleteSession(testDate) // Clean up first
-			
+
 			if _, err := storageEngine.CreateSession(testDate); err != nil {
 				return false
 			}
@@ -80,10 +80,10 @@ func TestAPIResponseCompatibility(t *testing.T) {
 	properties.Property("session metadata has correct structure", prop.ForAll(
 		func() bool {
 			testDate := fmt.Sprintf("2024-01-%02d", time.Now().Nanosecond()%28+1) // Generate unique date
-			
+
 			// Clean up first
 			storageEngine.DeleteSession(testDate)
-			
+
 			// Create test session
 			session, err := storageEngine.CreateSession(testDate)
 			if err != nil {
@@ -117,6 +117,84 @@ func TestAPIResponseCompatibility(t *testing.T) {
 				metadata.CustomSummary == "Test Summary" &&
 				metadata.OriginalSummary == "Original Summary" &&
 				metadata.ManualNotes != nil // Should be initialized as empty slice
+		},
+	))
+
+	// Property: Session metadata update persists manual notes
+	properties.Property("session metadata update persists manual notes", prop.ForAll(
+		func() bool {
+			testDate := fmt.Sprintf("2024-02-%02d", time.Now().Nanosecond()%28+1)
+			storageEngine.DeleteSession(testDate)
+
+			if _, err := storageEngine.CreateSession(testDate); err != nil {
+				return false
+			}
+
+			updatePayload := SessionMetadata{
+				CustomTitle:     "Updated Title",
+				CustomSummary:   "Updated Summary",
+				OriginalSummary: "Original",
+				ManualNotes: []ManualNote{
+					{
+						ID:        "note-1",
+						Content:   "First manual note",
+						CreatedAt: time.Now().UTC().Format(time.RFC3339),
+						UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+					},
+					{
+						ID:        "note-2",
+						Content:   "Second manual note",
+						CreatedAt: time.Now().UTC().Add(time.Second).Format(time.RFC3339),
+						UpdatedAt: time.Now().UTC().Add(time.Second).Format(time.RFC3339),
+					},
+				},
+			}
+
+			payload, err := json.Marshal(updatePayload)
+			if err != nil {
+				return false
+			}
+
+			req := httptest.NewRequest("PUT", fmt.Sprintf("/api/sessions/%s", testDate), bytes.NewReader(payload))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			server.handleAppDetails(w, req)
+			if w.Code != http.StatusOK {
+				return false
+			}
+
+			req = httptest.NewRequest("GET", fmt.Sprintf("/api/sessions/%s/metadata", testDate), nil)
+			w = httptest.NewRecorder()
+			server.handleAppDetails(w, req)
+			if w.Code != http.StatusOK {
+				return false
+			}
+
+			var got SessionMetadata
+			if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+				return false
+			}
+
+			if got.CustomTitle != updatePayload.CustomTitle ||
+				got.CustomSummary != updatePayload.CustomSummary ||
+				got.OriginalSummary != updatePayload.OriginalSummary {
+				return false
+			}
+
+			if len(got.ManualNotes) != len(updatePayload.ManualNotes) {
+				return false
+			}
+
+			for i := range got.ManualNotes {
+				if got.ManualNotes[i].Content != updatePayload.ManualNotes[i].Content {
+					return false
+				}
+				if got.ManualNotes[i].CreatedAt == "" || got.ManualNotes[i].UpdatedAt == "" {
+					return false
+				}
+			}
+
+			return true
 		},
 	))
 
