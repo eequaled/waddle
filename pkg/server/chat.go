@@ -123,7 +123,7 @@ func (s *Server) saveChatToStorage(context string, userMsg, aiMsg storage.ChatMe
 	// TODO: Implement global chat storage in StorageEngine
 }
 
-func (s *Server) gatherGlobalContextFromStorage(query string) string {
+func (s *Server) gatherGlobalContextFromStorage(_ string) string {
 	var contextBuilder strings.Builder
 	contextBuilder.WriteString("Recent Activity Summaries:\n")
 
@@ -156,7 +156,7 @@ func (s *Server) gatherGlobalContextFromStorage(query string) string {
 	return contextBuilder.String()
 }
 
-func (s *Server) gatherSessionContextFromStorage(date string, query string) string {
+func (s *Server) gatherSessionContextFromStorage(date string, _ string) string {
 	var contextBuilder strings.Builder
 	contextBuilder.WriteString(fmt.Sprintf("Activity for %s:\n", date))
 

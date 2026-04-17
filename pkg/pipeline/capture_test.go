@@ -8,7 +8,7 @@ import (
 
 // TestPipelineCreation tests basic pipeline creation and cleanup
 func TestPipelineCreation(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestPipelineCreation(t *testing.T) {
 
 // TestPipelineDoubleStart tests double start protection
 func TestPipelineDoubleStart(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestPipelineDoubleStart(t *testing.T) {
 
 // TestPipelineBackpressure tests backpressure handling
 func TestPipelineBackpressure(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -87,6 +87,12 @@ func TestPipelineBackpressure(t *testing.T) {
 		CaptureSource: CaptureSourceETW,
 		Metadata:      make(map[string]interface{}),
 	}
+	_ = activity.Timestamp
+	_ = activity.WindowHandle
+	_ = activity.ProcessID
+	_ = activity.ProcessName
+	_ = activity.WindowTitle
+	_ = activity.AppType
 
 	// Test backpressure handling by sending activity when pipeline is not started
 	pipeline.sendActivityWithBackpressure(activity)
@@ -110,6 +116,12 @@ func TestActivityBlockCreation(t *testing.T) {
 			"language": "go",
 		},
 	}
+	_ = activity.Timestamp
+	_ = activity.WindowHandle
+	_ = activity.ProcessID
+	_ = activity.ProcessName
+	_ = activity.WindowTitle
+	_ = activity.AppType
 
 	// Verify all fields are set correctly
 	if activity.ProcessID != 1000 {
@@ -158,7 +170,7 @@ func TestCaptureSourceTypes(t *testing.T) {
 
 // TestPipelineETWFallback tests ETW fallback mode detection
 func TestPipelineETWFallback(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -173,7 +185,7 @@ func TestPipelineETWFallback(t *testing.T) {
 
 // TestOCRBatchProcessing tests OCR batch processing logic
 func TestOCRBatchProcessing(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -192,6 +204,12 @@ func TestOCRBatchProcessing(t *testing.T) {
 			CaptureSource: CaptureSourceOCR,
 			Metadata:      make(map[string]interface{}),
 		}
+		_ = batch[i].Timestamp
+		_ = batch[i].WindowHandle
+		_ = batch[i].ProcessID
+		_ = batch[i].ProcessName
+		_ = batch[i].WindowTitle
+		_ = batch[i].AppType
 	}
 
 	// Process batch
@@ -211,7 +229,7 @@ func TestOCRBatchProcessing(t *testing.T) {
 
 // TestPipelineChannelBuffers tests channel buffer access
 func TestPipelineChannelBuffers(t *testing.T) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -243,7 +261,7 @@ func TestPipelineChannelBuffers(t *testing.T) {
 
 // BenchmarkPipelineBackpressure benchmarks backpressure handling
 func BenchmarkPipelineBackpressure(b *testing.B) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		b.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -259,6 +277,12 @@ func BenchmarkPipelineBackpressure(b *testing.B) {
 		CaptureSource: CaptureSourceETW,
 		Metadata:      make(map[string]interface{}),
 	}
+	_ = activity.Timestamp
+	_ = activity.WindowHandle
+	_ = activity.ProcessID
+	_ = activity.ProcessName
+	_ = activity.WindowTitle
+	_ = activity.AppType
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -268,7 +292,7 @@ func BenchmarkPipelineBackpressure(b *testing.B) {
 
 // BenchmarkOCRBatchProcessing benchmarks OCR batch processing
 func BenchmarkOCRBatchProcessing(b *testing.B) {
-	pipeline, err := NewPipeline()
+	pipeline, err := NewPipeline(nil)
 	if err != nil {
 		b.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -287,6 +311,12 @@ func BenchmarkOCRBatchProcessing(b *testing.B) {
 			CaptureSource: CaptureSourceOCR,
 			Metadata:      make(map[string]interface{}),
 		}
+		_ = batch[i].Timestamp
+		_ = batch[i].WindowHandle
+		_ = batch[i].ProcessID
+		_ = batch[i].ProcessName
+		_ = batch[i].WindowTitle
+		_ = batch[i].AppType
 	}
 
 	b.ResetTimer()

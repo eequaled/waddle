@@ -288,7 +288,7 @@ func (mm *MigrationManager) copyFile(src, dst string) error {
 }
 
 // verifyBackup verifies the integrity of the backup.
-func (mm *MigrationManager) verifyBackup(state *MigrationState) error {
+func (mm *MigrationManager) verifyBackup(_ *MigrationState) error {
 	// Compare file counts
 	originalCount, err := mm.countFiles(mm.legacyPath)
 	if err != nil {
@@ -600,7 +600,7 @@ func (mm *MigrationManager) migrateActivityBlocks(appDir, sessionDate, appName s
 }
 
 // migrateActivityBlock migrates a single activity block.
-func (mm *MigrationManager) migrateActivityBlock(blockPath, sessionDate, appName string, state *MigrationState, storageEngine *StorageEngine) error {
+func (mm *MigrationManager) migrateActivityBlock(blockPath, sessionDate, appName string, _ *MigrationState, storageEngine *StorageEngine) error {
 	data, err := os.ReadFile(blockPath)
 	if err != nil {
 		return err

@@ -1,6 +1,7 @@
 package synthesis
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestEntityExtractor_BasicExtraction(t *testing.T) {
-	extractor := NewEntityExtractor()
+	extractor := NewExtractor()
 	
 	testCases := []struct {
 		name     string
@@ -69,7 +70,7 @@ func TestEntityExtractor_BasicExtraction(t *testing.T) {
 	
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			entities := extractor.ExtractEntities(tc.text)
+			entities := extractor.Extract(tc.text)
 			
 			if len(entities) != len(tc.expected) {
 				t.Errorf("Expected %d entities, got %d", len(tc.expected), len(entities))
@@ -102,7 +103,6 @@ func TestEntityExtractor_BasicExtraction(t *testing.T) {
 }
 
 func TestEntityExtractor_JSONRoundTrip(t *testing.T) {
-	extractor := NewEntityExtractor()
 	
 	original := []Entity{
 		{Type: EntityTypeJIRA, Value: "PROJ-123", Count: 2},
@@ -112,13 +112,15 @@ func TestEntityExtractor_JSONRoundTrip(t *testing.T) {
 	}
 	
 	// Convert to JSON
-	jsonStr, err := extractor.EntitiesToJSON(original)
+	jsonBytes, err := json.Marshal(original)
+	jsonStr := string(jsonBytes)
 	if err != nil {
 		t.Fatalf("Failed to convert to JSON: %v", err)
 	}
 	
 	// Convert back from JSON
-	parsed, err := extractor.EntitiesFromJSON(jsonStr)
+	var parsed []Entity
+	err = json.Unmarshal([]byte(jsonStr), &parsed)
 	if err != nil {
 		t.Fatalf("Failed to parse from JSON: %v", err)
 	}
@@ -149,7 +151,7 @@ func TestEntityExtractor_JSONRoundTrip(t *testing.T) {
 
 // Property 12: Entity Extraction with Deduplication
 func TestProperty_EntityExtractionWithDeduplication(t *testing.T) {
-	extractor := NewEntityExtractor()
+	extractor := NewExtractor()
 	
 	properties := gopter.NewProperties(nil)
 	
@@ -191,7 +193,7 @@ func TestProperty_EntityExtractionWithDeduplication(t *testing.T) {
 			}
 			
 			text := strings.Join(textParts, " ")
-			entities := extractor.ExtractEntities(text)
+			entities := extractor.Extract(text)
 			
 			// Verify deduplication: each entity should have count >= 1
 			for _, entity := range entities {
@@ -227,7 +229,6 @@ func TestProperty_EntityExtractionWithDeduplication(t *testing.T) {
 
 // Property 13: Entity JSON Storage Round-Trip
 func TestProperty_EntityJSONStorageRoundTrip(t *testing.T) {
-	extractor := NewEntityExtractor()
 	
 	properties := gopter.NewProperties(nil)
 	
@@ -264,12 +265,14 @@ func TestProperty_EntityJSONStorageRoundTrip(t *testing.T) {
 			}
 			
 			// Convert to JSON and back
-			jsonStr, err := extractor.EntitiesToJSON(original)
+			jsonBytes, err := json.Marshal(original)
 			if err != nil {
 				return false
 			}
+			jsonStr := string(jsonBytes)
 			
-			parsed, err := extractor.EntitiesFromJSON(jsonStr)
+			var parsed []Entity
+			err = json.Unmarshal([]byte(jsonStr), &parsed)
 			if err != nil {
 				return false
 			}

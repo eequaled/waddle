@@ -21,7 +21,7 @@ func TestHybridPipelineOrder(t *testing.T) {
 	properties.Property("Pipeline should process ETW → UIA → OCR in correct order and skip OCR when structured data available", prop.ForAll(
 		func(windowHandle uintptr, processID uint32, appTypeInt int) bool {
 			// Create pipeline
-			pipeline, err := NewPipeline()
+			pipeline, err := NewPipeline(nil)
 			if err != nil {
 				t.Logf("Failed to create pipeline: %v", err)
 				return false
@@ -158,7 +158,7 @@ func TestOCRBatching(t *testing.T) {
 			// Limit number of requests to reasonable range
 			numRequests = (numRequests % 50) + 1 // 1-50 requests
 
-			pipeline, err := NewPipeline()
+			pipeline, err := NewPipeline(nil)
 			if err != nil {
 				t.Logf("Failed to create pipeline: %v", err)
 				return false
@@ -179,6 +179,12 @@ func TestOCRBatching(t *testing.T) {
 					StructuredData: false,
 					Metadata:      make(map[string]interface{}),
 				}
+				_ = activities[i].Timestamp
+				_ = activities[i].WindowHandle
+				_ = activities[i].ProcessID
+				_ = activities[i].ProcessName
+				_ = activities[i].WindowTitle
+				_ = activities[i].AppType
 			}
 
 			// Calculate expected number of batches
@@ -271,7 +277,7 @@ func TestPipelineSkipLogic(t *testing.T) {
 
 	properties.Property("Pipeline should skip OCR when structured data is available", prop.ForAll(
 		func(hasFile bool, hasLanguage bool, appTypeInt int) bool {
-			pipeline, err := NewPipeline()
+			pipeline, err := NewPipeline(nil)
 			if err != nil {
 				return false
 			}

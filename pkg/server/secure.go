@@ -337,7 +337,7 @@ func (s *SecureServer) routeRequest(req *APIRequest) *APIResponse {
 }
 
 // handleHealth handles health check requests
-func (s *SecureServer) handleHealth(req *APIRequest) *APIResponse {
+func (s *SecureServer) handleHealth(_ *APIRequest) *APIResponse {
 	return &APIResponse{
 		Status:  http.StatusOK,
 		Headers: map[string]string{"Content-Type": "application/json"},
@@ -351,7 +351,7 @@ func (s *SecureServer) handleHealth(req *APIRequest) *APIResponse {
 }
 
 // handleStats handles statistics requests
-func (s *SecureServer) handleStats(req *APIRequest) *APIResponse {
+func (s *SecureServer) handleStats(_ *APIRequest) *APIResponse {
 	return &APIResponse{
 		Status:  http.StatusOK,
 		Headers: map[string]string{"Content-Type": "application/json"},

@@ -280,7 +280,7 @@ func createTestLegacyData(legacyDir string) error {
 }
 
 // verifyMigrationIntegrity verifies that migrated data matches original data
-func verifyMigrationIntegrity(legacyDir string, storageEngine *StorageEngine, t *testing.T) bool {
+func verifyMigrationIntegrity(_ string, storageEngine *StorageEngine, t *testing.T) bool {
 	// Verify session was migrated
 	session, err := storageEngine.GetSession("2024-01-15")
 	if err != nil {
