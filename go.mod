@@ -1,6 +1,6 @@
 module waddle
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/Microsoft/go-winio v0.6.2
@@ -11,8 +11,8 @@ require (
 	github.com/philippgille/chromem-go v0.7.0
 	github.com/tekert/golang-etw v0.6.2
 	github.com/wailsapp/wails/v2 v2.11.0
-	golang.org/x/crypto v0.33.0
-	golang.org/x/sys v0.38.0
+	golang.org/x/crypto v0.50.0
+	golang.org/x/sys v0.43.0
 	modernc.org/sqlite v1.29.5
 )
 
@@ -48,8 +48,8 @@ require (
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/wailsapp/go-webview2 v1.0.22 // indirect
 	github.com/wailsapp/mimetype v1.4.1 // indirect
-	golang.org/x/net v0.35.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.49.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
