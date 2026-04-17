@@ -171,7 +171,7 @@ func TestSynthesisColumnsDefaults(t *testing.T) {
 	}
 	
 	// Retrieve the session and check defaults
-	retrieved, err := sm.GetByID(session.ID)
+	retrieved, err := sm.GetByID(int64(session.ID))
 	if err != nil {
 		t.Fatalf("Failed to retrieve session: %v", err)
 	}
@@ -238,13 +238,13 @@ func TestCaptureColumnsDefaults(t *testing.T) {
 		MicroSummary:  "Test block",
 	}
 	
-	err = sm.AddBlock(session.ID, "test-app", &block)
+	err = sm.AddBlock(int64(session.ID), "test-app", &block)
 	if err != nil {
 		t.Fatalf("Failed to add activity block: %v", err)
 	}
 	
 	// Retrieve the block and check defaults
-	blocks, err := sm.GetBlocks(session.ID, "test-app")
+	blocks, err := sm.GetBlocks(int64(session.ID), "test-app")
 	if err != nil {
 		t.Fatalf("Failed to retrieve activity blocks: %v", err)
 	}
@@ -333,7 +333,7 @@ func TestKnowledgeCardsCRUD(t *testing.T) {
 				t.Fatalf("Failed to scan knowledge card: %v", err)
 			}
 			
-			if sessionID != session.ID {
+			if sessionID != int64(session.ID) {
 				t.Errorf("Expected session_id %d, got %d", session.ID, sessionID)
 			}
 			

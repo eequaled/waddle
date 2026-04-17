@@ -207,13 +207,13 @@ func TestPropertyCascadeDeleteCompleteness(t *testing.T) {
 
 			// Store embedding (simulate text content generating embedding)
 			embedding := createNormalizedEmbedding(EmbeddingDimensions)
-			if err := se.vectorMgr.StoreEmbedding(session.ID, embedding); err != nil {
+			if err := se.vectorMgr.StoreEmbedding(int64(session.ID), embedding); err != nil {
 				t.Logf("Failed to store embedding: %v", err)
 				return false
 			}
 
 			// Verify data exists before deletion
-			if !se.vectorMgr.HasEmbedding(session.ID) {
+			if !se.vectorMgr.HasEmbedding(int64(session.ID)) {
 				t.Logf("Embedding should exist before deletion")
 				return false
 			}
@@ -239,7 +239,7 @@ func TestPropertyCascadeDeleteCompleteness(t *testing.T) {
 			}
 
 			// Property 2: Embedding should not exist in LanceDB
-			if se.vectorMgr.HasEmbedding(session.ID) {
+			if se.vectorMgr.HasEmbedding(int64(session.ID)) {
 				t.Logf("Embedding should not exist after deletion")
 				return false
 			}

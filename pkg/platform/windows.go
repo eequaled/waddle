@@ -6,30 +6,31 @@ import (
 	"context"
 	"path/filepath"
 
+	"waddle/pkg/capture"
+	capwin "waddle/pkg/capture/windows"
 	"waddle/pkg/infra/config"
-	"waddle/pkg/tracker/etw"
 )
 
-// ── WindowsTracker (unchanged from Week 1) ──────────────────────────
+// ── WindowsTracker ──────────────────────────────────────────────────
 
 // WindowsTracker wraps the ETW consumer behind the WindowTracker interface.
 type WindowsTracker struct {
-	consumer *etw.Consumer
+	consumer *capwin.ETWTracker
 	fEvents  chan FocusEvent
 	pEvents  chan ProcessEvent
 }
 
 // NewWindowTracker creates a standalone WindowTracker (backward compat).
 func NewWindowTracker() (WindowTracker, error) {
-	consumer, err := etw.NewConsumer()
+	consumer, err := capwin.NewETWTracker()
 	if err != nil && consumer == nil {
 		return nil, err
 	}
 
 	wt := &WindowsTracker{
 		consumer: consumer,
-		fEvents:  make(chan FocusEvent, etw.EventBufferSize),
-		pEvents:  make(chan ProcessEvent, etw.EventBufferSize),
+		fEvents:  make(chan FocusEvent, capture.EventBufferSize),
+		pEvents:  make(chan ProcessEvent, capture.EventBufferSize),
 	}
 
 	return wt, nil
@@ -49,10 +50,10 @@ func (w *WindowsTracker) Stop() error {
 	return w.consumer.Close()
 }
 
-func (w *WindowsTracker) FocusEvents() <-chan FocusEvent  { return w.fEvents }
+func (w *WindowsTracker) FocusEvents() <-chan FocusEvent    { return w.fEvents }
 func (w *WindowsTracker) ProcessEvents() <-chan ProcessEvent { return w.pEvents }
-func (w *WindowsTracker) IsFallbackMode() bool             { return w.consumer.IsFallbackMode() }
-func (w *WindowsTracker) DroppedEvents() int64              { return w.consumer.DroppedEvents() }
+func (w *WindowsTracker) IsFallbackMode() bool               { return w.consumer.IsFallbackMode() }
+func (w *WindowsTracker) DroppedEvents() int64               { return w.consumer.DroppedEvents() }
 
 func (w *WindowsTracker) bridgeFocusEvents() {
 	for e := range w.consumer.FocusEvents() {
@@ -68,7 +69,7 @@ func (w *WindowsTracker) bridgeFocusEvents() {
 func (w *WindowsTracker) bridgeProcessEvents() {
 	for e := range w.consumer.ProcessEvents() {
 		var eventType ProcessEventType
-		if e.EventType == etw.ProcessCreated {
+		if e.EventType == capture.ProcessCreated {
 			eventType = ProcessStart
 		} else {
 			eventType = ProcessStop
@@ -123,11 +124,11 @@ func NewPlatform(cfg *config.Config) (Platform, error) {
 
 // ── WindowTracker delegation ────────────────────────────────────────
 
-func (p *windowsPlatform) Start(ctx context.Context) error     { return p.tracker.Start(ctx) }
-func (p *windowsPlatform) FocusEvents() <-chan FocusEvent       { return p.tracker.FocusEvents() }
-func (p *windowsPlatform) ProcessEvents() <-chan ProcessEvent   { return p.tracker.ProcessEvents() }
-func (p *windowsPlatform) IsFallbackMode() bool                 { return p.tracker.IsFallbackMode() }
-func (p *windowsPlatform) DroppedEvents() int64                 { return p.tracker.DroppedEvents() }
+func (p *windowsPlatform) Start(ctx context.Context) error   { return p.tracker.Start(ctx) }
+func (p *windowsPlatform) FocusEvents() <-chan FocusEvent     { return p.tracker.FocusEvents() }
+func (p *windowsPlatform) ProcessEvents() <-chan ProcessEvent { return p.tracker.ProcessEvents() }
+func (p *windowsPlatform) IsFallbackMode() bool               { return p.tracker.IsFallbackMode() }
+func (p *windowsPlatform) DroppedEvents() int64               { return p.tracker.DroppedEvents() }
 
 func (p *windowsPlatform) Stop() error {
 	// Stop tracker first, then close UIA (which tears down the STA thread)

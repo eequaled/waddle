@@ -1,9 +1,11 @@
 //go:build windows
 
-package uia
+package windows
 
 import (
 	"testing"
+
+	"waddle/pkg/capture"
 
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
@@ -29,10 +31,10 @@ func TestStructuredMetadataStorage(t *testing.T) {
 			defer marshaler.Close()
 
 			// Map integer to valid AppType
-			appType := AppType(appTypeInt % 5) // 0-4 are valid AppType values
+			appType := capture.AppType(appTypeInt % 5) // 0-4 are valid AppType values
 
 			// Create test window info
-			windowInfo := &WindowInfo{
+			windowInfo := &capture.WindowInfo{
 				HWND:        uintptr(12345),
 				ProcessID:   uint32(1000),
 				ProcessName: "test.exe",
@@ -43,15 +45,15 @@ func TestStructuredMetadataStorage(t *testing.T) {
 
 			// Extract metadata based on app type
 			switch appType {
-			case AppTypeVSCode:
+			case capture.AppTypeVSCode:
 				marshaler.extractVSCodeMetadata(windowInfo)
-			case AppTypeChrome:
+			case capture.AppTypeChrome:
 				marshaler.extractChromeMetadata(windowInfo)
-			case AppTypeEdge:
+			case capture.AppTypeEdge:
 				marshaler.extractEdgeMetadata(windowInfo)
-			case AppTypeSlack:
+			case capture.AppTypeSlack:
 				marshaler.extractSlackMetadata(windowInfo)
-			case AppTypeUnknown:
+			case capture.AppTypeUnknown:
 				// No specific extraction for unknown type
 			}
 
@@ -63,7 +65,7 @@ func TestStructuredMetadataStorage(t *testing.T) {
 
 			// Verify metadata contains expected keys based on app type
 			switch appType {
-			case AppTypeVSCode:
+			case capture.AppTypeVSCode:
 				if _, exists := windowInfo.Metadata["file"]; !exists {
 					t.Logf("VS Code metadata should contain 'file' key")
 					return false
@@ -77,7 +79,7 @@ func TestStructuredMetadataStorage(t *testing.T) {
 					return false
 				}
 
-			case AppTypeChrome, AppTypeEdge:
+			case capture.AppTypeChrome, capture.AppTypeEdge:
 				if _, exists := windowInfo.Metadata["pageTitle"]; !exists {
 					t.Logf("Browser metadata should contain 'pageTitle' key")
 					return false
@@ -87,7 +89,7 @@ func TestStructuredMetadataStorage(t *testing.T) {
 					return false
 				}
 
-			case AppTypeSlack:
+			case capture.AppTypeSlack:
 				if _, exists := windowInfo.Metadata["channel"]; !exists {
 					t.Logf("Slack metadata should contain 'channel' key")
 					return false
@@ -167,12 +169,12 @@ func TestMetadataJSONRoundTrip(t *testing.T) {
 			defer marshaler.Close()
 
 			// Create window info with VS Code metadata
-			windowInfo := &WindowInfo{
+			windowInfo := &capture.WindowInfo{
 				HWND:        uintptr(12345),
 				ProcessID:   uint32(1000),
 				ProcessName: "Code.exe",
 				WindowTitle: windowTitle,
-				AppType:     AppTypeVSCode,
+				AppType:     capture.AppTypeVSCode,
 				Metadata:    make(map[string]interface{}),
 			}
 
@@ -191,7 +193,7 @@ func TestMetadataJSONRoundTrip(t *testing.T) {
 					t.Logf("Key '%s' lost during round-trip", key)
 					return false
 				} else if currentValue != originalValue {
-					t.Logf("Value for key '%s' changed during round-trip: %v -> %v", 
+					t.Logf("Value for key '%s' changed during round-trip: %v -> %v",
 						key, originalValue, currentValue)
 					return false
 				}
@@ -217,24 +219,23 @@ func TestCaptureSourceTracking(t *testing.T) {
 			}
 			defer marshaler.Close()
 
-			windowInfo := &WindowInfo{
+			windowInfo := &capture.WindowInfo{
 				HWND:        uintptr(12345),
 				ProcessID:   uint32(1000),
 				ProcessName: "test.exe",
 				WindowTitle: "Test Window",
-				AppType:     AppTypeVSCode,
+				AppType:     capture.AppTypeVSCode,
 				Metadata:    make(map[string]interface{}),
 			}
 
 			// Simulate UI Automation extraction
-			var uiaErr error
 			if shouldFail {
-				uiaErr = marshaler.tryUIAutomationExtraction(windowInfo)
+				_ = marshaler.tryUIAutomationExtraction(windowInfo)
 				// Simulate failure
 				windowInfo.Metadata["uia_extraction_failed"] = true
 				windowInfo.Metadata["capture_source"] = "ocr_fallback"
 			} else {
-				uiaErr = marshaler.tryUIAutomationExtraction(windowInfo)
+				uiaErr := marshaler.tryUIAutomationExtraction(windowInfo)
 				if uiaErr == nil {
 					windowInfo.Metadata["capture_source"] = "ui_automation"
 				}

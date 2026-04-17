@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"waddle/pkg/types"
+
 	chromem "github.com/philippgille/chromem-go"
 )
 
@@ -348,7 +350,7 @@ func (vm *VectorManager) Search(queryEmbedding []float32, topK int) ([]VectorSea
 		modelVersion := r.Metadata["model_version"]
 
 		searchResults = append(searchResults, VectorSearchResult{
-			SessionID:    sessionID,
+			SessionID:    types.SessionID(sessionID),
 			Score:        r.Similarity,
 			ModelVersion: modelVersion,
 		})

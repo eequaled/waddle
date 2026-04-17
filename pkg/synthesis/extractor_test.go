@@ -150,11 +150,13 @@ func TestProperty_EntityExtractionWithDeduplication(t *testing.T) {
 	properties.Property("Entity extraction deduplicates correctly", prop.ForAll(
 		func(jiraTickets []string, hashtags []string, mentions []string, urls []string) bool {
 			var textParts []string
+			expectedCounts := make(map[string]int)
 
 			for _, ticket := range jiraTickets {
 				if len(ticket) >= 3 {
 					validTicket := strings.ToUpper(ticket[:2]) + "-123"
 					textParts = append(textParts, validTicket, validTicket)
+					expectedCounts[string(EntityTypeJIRA)+":"+strings.ToLower(validTicket)] += 2
 				}
 			}
 
@@ -162,6 +164,7 @@ func TestProperty_EntityExtractionWithDeduplication(t *testing.T) {
 				if len(tag) > 0 {
 					validTag := "#" + strings.ReplaceAll(tag, " ", "_")
 					textParts = append(textParts, validTag, validTag)
+					expectedCounts[string(EntityTypeHashtag)+":"+strings.ToLower(validTag)] += 2
 				}
 			}
 
@@ -169,6 +172,7 @@ func TestProperty_EntityExtractionWithDeduplication(t *testing.T) {
 				if len(mention) > 0 {
 					validMention := "@" + strings.ReplaceAll(mention, " ", "_")
 					textParts = append(textParts, validMention, validMention)
+					expectedCounts[string(EntityTypeMention)+":"+strings.ToLower(validMention)] += 2
 				}
 			}
 
@@ -176,27 +180,35 @@ func TestProperty_EntityExtractionWithDeduplication(t *testing.T) {
 				if len(url) > 0 {
 					validURL := "https://" + strings.ReplaceAll(url, " ", "") + ".com"
 					textParts = append(textParts, validURL, validURL)
+					expectedCounts[string(EntityTypeURL)+":"+strings.ToLower(validURL)] += 2
 				}
 			}
 
 			text := strings.Join(textParts, " ")
 			entities := extractor.Extract(text)
 
+			if len(textParts) == 0 {
+				return true
+			}
+
 			for _, entity := range entities {
 				if entity.Count < 1 {
 					return false
 				}
-				if len(textParts) > 0 && entity.Count != 2 {
+				key := string(entity.Type) + ":" + strings.ToLower(entity.Value)
+				expected, exists := expectedCounts[key]
+				if exists && entity.Count != expected {
 					return false
 				}
 			}
 
 			seen := make(map[string]bool)
 			for _, entity := range entities {
-				if seen[entity.Value] {
+				key := string(entity.Type) + ":" + strings.ToLower(entity.Value)
+				if seen[key] {
 					return false
 				}
-				seen[entity.Value] = true
+				seen[key] = true
 			}
 
 			return true

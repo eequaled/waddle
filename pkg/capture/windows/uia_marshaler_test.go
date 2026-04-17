@@ -1,10 +1,12 @@
 //go:build windows
 
-package uia
+package windows
 
 import (
 	"testing"
 	"time"
+
+	"waddle/pkg/capture"
 )
 
 // TestMarshalerCreation tests basic marshaler creation and cleanup
@@ -101,13 +103,13 @@ func TestAppTypeDetection(t *testing.T) {
 	tests := []struct {
 		title    string
 		process  string
-		expected AppType
+		expected capture.AppType
 	}{
-		{"Visual Studio Code - file.go", "Code.exe", AppTypeVSCode},
-		{"Google Chrome", "chrome.exe", AppTypeChrome},
-		{"Microsoft Edge", "msedge.exe", AppTypeEdge},
-		{"Slack - Workspace", "slack.exe", AppTypeSlack},
-		{"Notepad", "notepad.exe", AppTypeUnknown},
+		{"Visual Studio Code - file.go", "Code.exe", capture.AppTypeVSCode},
+		{"Google Chrome", "chrome.exe", capture.AppTypeChrome},
+		{"Microsoft Edge", "msedge.exe", capture.AppTypeEdge},
+		{"Slack - Workspace", "slack.exe", capture.AppTypeSlack},
+		{"Notepad", "notepad.exe", capture.AppTypeUnknown},
 	}
 
 	marshaler, err := NewMarshaler()
@@ -118,7 +120,7 @@ func TestAppTypeDetection(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.title, func(t *testing.T) {
-			windowInfo := &WindowInfo{
+			windowInfo := &capture.WindowInfo{
 				WindowTitle: test.title,
 				ProcessName: test.process,
 				Metadata:    make(map[string]interface{}),
@@ -136,9 +138,9 @@ func TestAppTypeDetection(t *testing.T) {
 // TestContainsAny tests the containsAny helper function
 func TestContainsAny(t *testing.T) {
 	tests := []struct {
-		text        string
-		substrings  []string
-		expected    bool
+		text       string
+		substrings []string
+		expected   bool
 	}{
 		{"Visual Studio Code", []string{"Visual Studio", "Code"}, true},
 		{"Google Chrome", []string{"Chrome", "Firefox"}, true},
@@ -150,7 +152,7 @@ func TestContainsAny(t *testing.T) {
 	for _, test := range tests {
 		result := containsAny(test.text, test.substrings)
 		if result != test.expected {
-			t.Errorf("containsAny(%q, %v) = %v, expected %v", 
+			t.Errorf("containsAny(%q, %v) = %v, expected %v",
 				test.text, test.substrings, result, test.expected)
 		}
 	}
@@ -159,20 +161,20 @@ func TestContainsAny(t *testing.T) {
 // TestAppTypeString tests AppType string representation
 func TestAppTypeString(t *testing.T) {
 	tests := []struct {
-		appType  AppType
+		appType  capture.AppType
 		expected string
 	}{
-		{AppTypeUnknown, "unknown"},
-		{AppTypeVSCode, "vscode"},
-		{AppTypeChrome, "chrome"},
-		{AppTypeEdge, "edge"},
-		{AppTypeSlack, "slack"},
+		{capture.AppTypeUnknown, "unknown"},
+		{capture.AppTypeVSCode, "vscode"},
+		{capture.AppTypeChrome, "chrome"},
+		{capture.AppTypeEdge, "edge"},
+		{capture.AppTypeSlack, "slack"},
 	}
 
 	for _, test := range tests {
 		result := test.appType.String()
 		if result != test.expected {
-			t.Errorf("AppType(%d).String() = %q, expected %q", 
+			t.Errorf("AppType(%d).String() = %q, expected %q",
 				int(test.appType), result, test.expected)
 		}
 	}
@@ -210,6 +212,7 @@ func BenchmarkMarshalerGetWindowInfo(b *testing.B) {
 		_, _ = marshaler.GetWindowInfo(uintptr(i + 1))
 	}
 }
+
 // TestOCRFallback tests OCR fallback functionality
 func TestOCRFallback(t *testing.T) {
 	marshaler, err := NewMarshaler()
@@ -224,8 +227,8 @@ func TestOCRFallback(t *testing.T) {
 	}
 
 	// Test ShouldFallbackToOCR with unknown app type
-	windowInfo := &WindowInfo{
-		AppType:  AppTypeUnknown,
+	windowInfo := &capture.WindowInfo{
+		AppType:  capture.AppTypeUnknown,
 		Metadata: make(map[string]interface{}),
 	}
 	if !marshaler.ShouldFallbackToOCR(windowInfo) {
@@ -233,8 +236,8 @@ func TestOCRFallback(t *testing.T) {
 	}
 
 	// Test ShouldFallbackToOCR with UIA extraction failure
-	windowInfo = &WindowInfo{
-		AppType:  AppTypeVSCode,
+	windowInfo = &capture.WindowInfo{
+		AppType: capture.AppTypeVSCode,
 		Metadata: map[string]interface{}{
 			"uia_extraction_failed": true,
 		},
@@ -244,8 +247,8 @@ func TestOCRFallback(t *testing.T) {
 	}
 
 	// Test ShouldFallbackToOCR with successful extraction
-	windowInfo = &WindowInfo{
-		AppType:  AppTypeVSCode,
+	windowInfo = &capture.WindowInfo{
+		AppType: capture.AppTypeVSCode,
 		Metadata: map[string]interface{}{
 			"capture_source": "ui_automation",
 		},
@@ -274,7 +277,7 @@ func TestFileExtensionMapping(t *testing.T) {
 	for _, test := range tests {
 		result := mapFileExtensionToLanguage(test.extension)
 		if result != test.expected {
-			t.Errorf("mapFileExtensionToLanguage(%q) = %q, expected %q", 
+			t.Errorf("mapFileExtensionToLanguage(%q) = %q, expected %q",
 				test.extension, result, test.expected)
 		}
 	}
@@ -310,43 +313,43 @@ func TestAppSpecificExtraction(t *testing.T) {
 	tests := []struct {
 		name        string
 		windowTitle string
-		appType     AppType
+		appType     capture.AppType
 		expectedKey string
 	}{
 		{
 			name:        "VS Code file extraction",
 			windowTitle: "main.go - Visual Studio Code",
-			appType:     AppTypeVSCode,
+			appType:     capture.AppTypeVSCode,
 			expectedKey: "file",
 		},
 		{
 			name:        "Chrome page title extraction",
 			windowTitle: "GitHub - Google Chrome",
-			appType:     AppTypeChrome,
+			appType:     capture.AppTypeChrome,
 			expectedKey: "pageTitle",
 		},
 		{
 			name:        "Slack channel extraction",
 			windowTitle: "#general | My Workspace",
-			appType:     AppTypeSlack,
+			appType:     capture.AppTypeSlack,
 			expectedKey: "channel",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			windowInfo := &WindowInfo{
+			windowInfo := &capture.WindowInfo{
 				WindowTitle: test.windowTitle,
 				AppType:     test.appType,
 				Metadata:    make(map[string]interface{}),
 			}
 
 			switch test.appType {
-			case AppTypeVSCode:
+			case capture.AppTypeVSCode:
 				marshaler.extractVSCodeMetadata(windowInfo)
-			case AppTypeChrome:
+			case capture.AppTypeChrome:
 				marshaler.extractChromeMetadata(windowInfo)
-			case AppTypeSlack:
+			case capture.AppTypeSlack:
 				marshaler.extractSlackMetadata(windowInfo)
 			}
 
@@ -356,7 +359,6 @@ func TestAppSpecificExtraction(t *testing.T) {
 		})
 	}
 }
-
 
 // TestCloseDuringActiveRequest tests that Close() during an active request doesn't cause deadlock
 // This is a critical race condition test recommended by senior dev review

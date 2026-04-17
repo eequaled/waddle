@@ -270,7 +270,7 @@ func (pm *PerformanceMonitor) generateTestData(count int) error {
 			if err != nil {
 				log.Printf("Warning: Failed to generate embedding for session %d: %v", i, err)
 			} else {
-				err = pm.storageEngine.vectorMgr.StoreEmbedding(session.ID, embedding)
+				err = pm.storageEngine.vectorMgr.StoreEmbedding(int64(session.ID), embedding)
 				if err != nil {
 					log.Printf("Warning: Failed to store embedding for session %d: %v", i, err)
 				}

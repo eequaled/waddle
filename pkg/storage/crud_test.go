@@ -165,12 +165,12 @@ func TestActivityBlockCRUD(t *testing.T) {
 			MicroSummary: "User was browsing",
 		}
 
-		err := sm.AddBlock(session.ID, "Chrome", block)
+		err := sm.AddBlock(int64(session.ID), "Chrome", block)
 		if err != nil {
 			t.Fatalf("Failed to add block: %v", err)
 		}
 
-		blocks, err := sm.GetBlocks(session.ID, "Chrome")
+		blocks, err := sm.GetBlocks(int64(session.ID), "Chrome")
 		if err != nil {
 			t.Fatalf("Failed to get blocks: %v", err)
 		}
@@ -193,12 +193,12 @@ func TestActivityBlockCRUD(t *testing.T) {
 			MicroSummary: "Updated summary",
 		}
 
-		err := sm.AddBlock(session.ID, "Chrome", block)
+		err := sm.AddBlock(int64(session.ID), "Chrome", block)
 		if err != nil {
 			t.Fatalf("Failed to update block: %v", err)
 		}
 
-		blocks, err := sm.GetBlocks(session.ID, "Chrome")
+		blocks, err := sm.GetBlocks(int64(session.ID), "Chrome")
 		if err != nil {
 			t.Fatalf("Failed to get blocks: %v", err)
 		}
@@ -234,14 +234,14 @@ func TestChatCRUD(t *testing.T) {
 			Content: "You worked on the storage migration project.",
 		}
 
-		if err := sm.AddChat(session.ID, chat1); err != nil {
+		if err := sm.AddChat(int64(session.ID), chat1); err != nil {
 			t.Fatalf("Failed to add user chat: %v", err)
 		}
-		if err := sm.AddChat(session.ID, chat2); err != nil {
+		if err := sm.AddChat(int64(session.ID), chat2); err != nil {
 			t.Fatalf("Failed to add assistant chat: %v", err)
 		}
 
-		chats, err := sm.GetChats(session.ID)
+		chats, err := sm.GetChats(int64(session.ID))
 		if err != nil {
 			t.Fatalf("Failed to get chats: %v", err)
 		}
@@ -261,7 +261,7 @@ func TestChatCRUD(t *testing.T) {
 			Content: "Test",
 		}
 
-		err := sm.AddChat(session.ID, chat)
+		err := sm.AddChat(int64(session.ID), chat)
 		if err == nil {
 			t.Error("Expected error for invalid role")
 		}
@@ -412,13 +412,13 @@ func TestForeignKeyIntegrity(t *testing.T) {
 				EndTime:   time.Now().Add(5 * time.Minute),
 				OCRText:   "Test OCR",
 			}
-			if err := sm.AddBlock(session.ID, appName, block); err != nil {
+			if err := sm.AddBlock(int64(session.ID), appName, block); err != nil {
 				return false
 			}
 
 			// Add chat
 			chat := &ChatMessage{Role: ChatRoleUser, Content: "Test"}
-			if err := sm.AddChat(session.ID, chat); err != nil {
+			if err := sm.AddChat(int64(session.ID), chat); err != nil {
 				return false
 			}
 
@@ -476,7 +476,7 @@ func TestDataValidation(t *testing.T) {
 			sm.Create(session)
 
 			chat := &ChatMessage{Role: invalidRole, Content: "Test"}
-			err := sm.AddChat(session.ID, chat)
+			err := sm.AddChat(int64(session.ID), chat)
 			return err != nil
 		},
 		gopter.Gen(func(params *gopter.GenParameters) *gopter.GenResult {

@@ -60,11 +60,11 @@ export namespace pipeline {
 
 }
 
-export namespace storage {
+export namespace types {
 	
 	export class ActivityBlock {
-	    id: number;
-	    appActivityId: number;
+	    id: string;
+	    appActivityId: string;
 	    blockId: string;
 	    // Go type: time
 	    startTime: any;
@@ -111,8 +111,8 @@ export namespace storage {
 		}
 	}
 	export class AppActivity {
-	    id: number;
-	    sessionId: number;
+	    id: string;
+	    sessionId: string;
 	    appName: string;
 	    // Go type: time
 	    createdAt: any;
@@ -153,8 +153,8 @@ export namespace storage {
 		}
 	}
 	export class ManualNote {
-	    id: number;
-	    sessionId: number;
+	    id: string;
+	    sessionId: string;
 	    content: string;
 	    // Go type: time
 	    createdAt: any;
@@ -193,7 +193,7 @@ export namespace storage {
 		}
 	}
 	export class Session {
-	    id: number;
+	    id: string;
 	    date: string;
 	    customTitle: string;
 	    customSummary: string;

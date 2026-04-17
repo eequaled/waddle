@@ -745,7 +745,7 @@ func (mm *MigrationManager) generateEmbeddings(state *MigrationState, storageEng
 		}
 
 		// Queue embedding generation (async) - access through vector manager
-		if err := storageEngine.vectorMgr.QueueEmbedding(session.ID, text); err != nil {
+		if err := storageEngine.vectorMgr.QueueEmbedding(int64(session.ID), text); err != nil {
 			// Log error but continue
 			fmt.Printf("Warning: Failed to queue embedding for session %s: %v\n", session.Date, err)
 		}

@@ -1,6 +1,6 @@
 //go:build windows
 
-package uia
+package windows
 
 import (
 	"fmt"
@@ -11,69 +11,34 @@ import (
 	"time"
 	"unsafe"
 
+	"waddle/pkg/capture"
+
 	"github.com/go-ole/go-ole"
 )
 
-// Marshaler provides thread-safe access to UI Automation COM interfaces
-// All UI Automation calls must be marshaled to a dedicated STA thread
+// Marshaler provides thread-safe access to UI Automation COM interfaces.
+// All UI Automation calls must be marshaled to a dedicated STA thread.
 type Marshaler struct {
-	requests  chan *staRequest
-	quit      chan struct{}
-	doneChan  chan struct{} // Signals STA thread shutdown complete
-	wg        sync.WaitGroup
-	mu        sync.RWMutex
-	running   bool
-	closed    atomic.Bool // Atomic flag to prevent Close() races
+	requests chan *staRequest
+	quit     chan struct{}
+	doneChan chan struct{} // Signals STA thread shutdown complete
+	wg       sync.WaitGroup
+	mu       sync.RWMutex
+	running  bool
+	closed   atomic.Bool // Atomic flag to prevent Close() races
 }
 
-// staRequest represents a request to execute on the STA thread
+// staRequest represents a request to execute on the STA thread.
 type staRequest struct {
 	operation string
 	hwnd      uintptr
 	response  chan *staResponse
 }
 
-// staResponse represents a response from the STA thread
+// staResponse represents a response from the STA thread.
 type staResponse struct {
-	windowInfo *WindowInfo
+	windowInfo *capture.WindowInfo
 	err        error
-}
-
-// WindowInfo contains extracted window information
-type WindowInfo struct {
-	HWND        uintptr
-	ProcessID   uint32
-	ProcessName string
-	WindowTitle string
-	AppType     AppType
-	Metadata    map[string]interface{}
-}
-
-// AppType represents the type of application
-type AppType int
-
-const (
-	AppTypeUnknown AppType = iota
-	AppTypeVSCode
-	AppTypeChrome
-	AppTypeEdge
-	AppTypeSlack
-)
-
-// String returns the string representation of AppType
-func (a AppType) String() string {
-	switch a {
-	case AppTypeVSCode:
-		return "vscode"
-	case AppTypeChrome:
-		return "chrome"
-	case AppTypeEdge:
-		return "edge"
-	case AppTypeSlack:
-		return "slack"
-	default:
-		return "unknown"
-	}
 }
 
 // COM interface constants
@@ -82,7 +47,7 @@ const (
 	COINIT_DISABLE_OLE1DDE   = 0x4
 )
 
-// NewMarshaler creates a new UI Automation marshaler with dedicated STA thread
+// NewMarshaler creates a new UI Automation marshaler with dedicated STA thread.
 func NewMarshaler() (*Marshaler, error) {
 	m := &Marshaler{
 		requests: make(chan *staRequest, 100),
@@ -101,7 +66,7 @@ func NewMarshaler() (*Marshaler, error) {
 	return m, nil
 }
 
-// staThread runs the dedicated STA thread for UI Automation COM calls
+// staThread runs the dedicated STA thread for UI Automation COM calls.
 func (m *Marshaler) staThread() {
 	defer m.wg.Done()
 	defer func() {
@@ -144,7 +109,7 @@ func (m *Marshaler) staThread() {
 	}
 }
 
-// drainPendingRequests sends error responses to any remaining requests in the queue
+// drainPendingRequests sends error responses to any remaining requests in the queue.
 func (m *Marshaler) drainPendingRequests() {
 	for {
 		select {
@@ -156,8 +121,8 @@ func (m *Marshaler) drainPendingRequests() {
 	}
 }
 
-// handleSTARequest processes a UI Automation request on the STA thread
-// Includes panic recovery to prevent goroutine leaks
+// handleSTARequest processes a UI Automation request on the STA thread.
+// Includes panic recovery to prevent goroutine leaks.
 func (m *Marshaler) handleSTARequest(req *staRequest) {
 	// Panic recovery - COM calls can panic
 	defer func() {
@@ -175,14 +140,14 @@ func (m *Marshaler) handleSTARequest(req *staRequest) {
 	}
 }
 
-// getWindowInfoSTA extracts window information using UI Automation on STA thread
-func (m *Marshaler) getWindowInfoSTA(hwnd uintptr) (*WindowInfo, error) {
-	windowInfo := &WindowInfo{
+// getWindowInfoSTA extracts window information using UI Automation on STA thread.
+func (m *Marshaler) getWindowInfoSTA(hwnd uintptr) (*capture.WindowInfo, error) {
+	windowInfo := &capture.WindowInfo{
 		HWND:        hwnd,
-		ProcessID:   0, // Will be filled by getBasicWindowInfo
+		ProcessID:   0,  // Will be filled by getBasicWindowInfo
 		ProcessName: "", // Will be filled by getBasicWindowInfo
 		WindowTitle: "", // Will be filled by getBasicWindowInfo
-		AppType:     AppTypeUnknown,
+		AppType:     capture.AppTypeUnknown,
 		Metadata:    make(map[string]interface{}),
 	}
 
@@ -211,8 +176,8 @@ func (m *Marshaler) getWindowInfoSTA(hwnd uintptr) (*WindowInfo, error) {
 	return windowInfo, nil // Always return windowInfo, even if extraction failed
 }
 
-// getBasicWindowInfo extracts basic window information using Win32 API
-func (m *Marshaler) getBasicWindowInfo(info *WindowInfo) error {
+// getBasicWindowInfo extracts basic window information using Win32 API.
+func (m *Marshaler) getBasicWindowInfo(info *capture.WindowInfo) error {
 	// Get process ID
 	var processID uint32
 	_, _, err := syscall.NewLazyDLL("user32.dll").NewProc("GetWindowThreadProcessId").Call(
@@ -244,15 +209,15 @@ func (m *Marshaler) getBasicWindowInfo(info *WindowInfo) error {
 	return nil
 }
 
-// detectAppType detects the application type based on window title and process name
-func (m *Marshaler) detectAppType(info *WindowInfo) {
+// detectAppType detects the application type based on window title and process name.
+func (m *Marshaler) detectAppType(info *capture.WindowInfo) {
 	title := info.WindowTitle
 	process := info.ProcessName
 
 	// Detect VS Code
 	if containsAny(title, []string{"Visual Studio Code", "VSCode"}) ||
 		containsAny(process, []string{"Code.exe", "code.exe"}) {
-		info.AppType = AppTypeVSCode
+		info.AppType = capture.AppTypeVSCode
 		m.extractVSCodeMetadata(info)
 		return
 	}
@@ -260,7 +225,7 @@ func (m *Marshaler) detectAppType(info *WindowInfo) {
 	// Detect Chrome
 	if containsAny(title, []string{"Google Chrome"}) ||
 		containsAny(process, []string{"chrome.exe"}) {
-		info.AppType = AppTypeChrome
+		info.AppType = capture.AppTypeChrome
 		m.extractChromeMetadata(info)
 		return
 	}
@@ -268,7 +233,7 @@ func (m *Marshaler) detectAppType(info *WindowInfo) {
 	// Detect Edge
 	if containsAny(title, []string{"Microsoft Edge"}) ||
 		containsAny(process, []string{"msedge.exe"}) {
-		info.AppType = AppTypeEdge
+		info.AppType = capture.AppTypeEdge
 		m.extractEdgeMetadata(info)
 		return
 	}
@@ -276,16 +241,16 @@ func (m *Marshaler) detectAppType(info *WindowInfo) {
 	// Detect Slack
 	if containsAny(title, []string{"Slack"}) ||
 		containsAny(process, []string{"slack.exe"}) {
-		info.AppType = AppTypeSlack
+		info.AppType = capture.AppTypeSlack
 		m.extractSlackMetadata(info)
 		return
 	}
 
-	info.AppType = AppTypeUnknown
+	info.AppType = capture.AppTypeUnknown
 }
 
-// extractVSCodeMetadata extracts VS Code specific metadata
-func (m *Marshaler) extractVSCodeMetadata(info *WindowInfo) {
+// extractVSCodeMetadata extracts VS Code specific metadata.
+func (m *Marshaler) extractVSCodeMetadata(info *capture.WindowInfo) {
 	// Extract file name from window title
 	// VS Code titles are typically: "filename.ext - Visual Studio Code"
 	title := info.WindowTitle
@@ -294,7 +259,7 @@ func (m *Marshaler) extractVSCodeMetadata(info *WindowInfo) {
 		if dashIndex := findSubstring(title, " - "); dashIndex != -1 {
 			filename := title[:dashIndex]
 			info.Metadata["file"] = filename
-			
+
 			// Extract language from file extension
 			if dotIndex := findLastChar(filename, '.'); dotIndex != -1 {
 				ext := filename[dotIndex+1:]
@@ -310,15 +275,15 @@ func (m *Marshaler) extractVSCodeMetadata(info *WindowInfo) {
 		info.Metadata["file"] = "unknown.txt"
 		info.Metadata["language"] = "unknown"
 	}
-	
+
 	// Git branch would be extracted from status bar via UI Automation
 	// For now, use placeholder
 	info.Metadata["gitBranch"] = "main"
 	info.Metadata["extractionMethod"] = "title_parsing"
 }
 
-// extractChromeMetadata extracts Chrome specific metadata
-func (m *Marshaler) extractChromeMetadata(info *WindowInfo) {
+// extractChromeMetadata extracts Chrome specific metadata.
+func (m *Marshaler) extractChromeMetadata(info *capture.WindowInfo) {
 	// Extract URL and page title from window title
 	// Chrome titles are typically: "Page Title - Google Chrome"
 	title := info.WindowTitle
@@ -334,15 +299,15 @@ func (m *Marshaler) extractChromeMetadata(info *WindowInfo) {
 	} else {
 		info.Metadata["pageTitle"] = "unknown"
 	}
-	
+
 	// URL would be extracted from address bar via UI Automation
 	// For now, use placeholder
 	info.Metadata["url"] = "unknown"
 	info.Metadata["extractionMethod"] = "title_parsing"
 }
 
-// extractEdgeMetadata extracts Edge specific metadata
-func (m *Marshaler) extractEdgeMetadata(info *WindowInfo) {
+// extractEdgeMetadata extracts Edge specific metadata.
+func (m *Marshaler) extractEdgeMetadata(info *capture.WindowInfo) {
 	// Extract URL and page title from window title
 	// Edge titles are typically: "Page Title - Microsoft Edge"
 	title := info.WindowTitle
@@ -358,15 +323,15 @@ func (m *Marshaler) extractEdgeMetadata(info *WindowInfo) {
 	} else {
 		info.Metadata["pageTitle"] = "unknown"
 	}
-	
+
 	// URL would be extracted from address bar via UI Automation
 	// For now, use placeholder
 	info.Metadata["url"] = "unknown"
 	info.Metadata["extractionMethod"] = "title_parsing"
 }
 
-// extractSlackMetadata extracts Slack specific metadata
-func (m *Marshaler) extractSlackMetadata(info *WindowInfo) {
+// extractSlackMetadata extracts Slack specific metadata.
+func (m *Marshaler) extractSlackMetadata(info *capture.WindowInfo) {
 	// Extract channel and workspace from window title
 	// Slack titles are typically: "#channel-name | Workspace Name"
 	title := info.WindowTitle
@@ -375,7 +340,7 @@ func (m *Marshaler) extractSlackMetadata(info *WindowInfo) {
 		if pipeIndex := findSubstring(title, " | "); pipeIndex != -1 {
 			channelPart := title[:pipeIndex]
 			workspacePart := title[pipeIndex+3:]
-			
+
 			info.Metadata["channel"] = channelPart
 			info.Metadata["workspace"] = workspacePart
 		} else {
@@ -387,11 +352,11 @@ func (m *Marshaler) extractSlackMetadata(info *WindowInfo) {
 		info.Metadata["channel"] = "unknown"
 		info.Metadata["workspace"] = "unknown"
 	}
-	
+
 	info.Metadata["extractionMethod"] = "title_parsing"
 }
 
-// containsAny checks if the text contains any of the substrings
+// containsAny checks if the text contains any of the substrings.
 func containsAny(text string, substrings []string) bool {
 	for _, substr := range substrings {
 		if len(text) >= len(substr) {
@@ -405,8 +370,8 @@ func containsAny(text string, substrings []string) bool {
 	return false
 }
 
-// GetWindowInfo extracts window information using UI Automation (thread-safe)
-func (m *Marshaler) GetWindowInfo(hwnd uintptr) (*WindowInfo, error) {
+// GetWindowInfo extracts window information using UI Automation (thread-safe).
+func (m *Marshaler) GetWindowInfo(hwnd uintptr) (*capture.WindowInfo, error) {
 	// Check if marshaler is closed using atomic flag
 	if m.closed.Load() {
 		return nil, fmt.Errorf("marshaler is closed")
@@ -459,7 +424,7 @@ func (m *Marshaler) GetWindowInfo(hwnd uintptr) (*WindowInfo, error) {
 	}
 }
 
-// Close stops the marshaler and cleans up resources
+// Close stops the marshaler and cleans up resources.
 func (m *Marshaler) Close() error {
 	// Use atomic flag to prevent double-close and race conditions
 	if m.closed.Swap(true) {
@@ -497,12 +462,12 @@ func (m *Marshaler) Close() error {
 
 // Helper functions for string manipulation
 
-// findSubstring finds the first occurrence of substr in text
+// findSubstring finds the first occurrence of substr in text.
 func findSubstring(text, substr string) int {
 	if len(substr) == 0 || len(text) < len(substr) {
 		return -1
 	}
-	
+
 	for i := 0; i <= len(text)-len(substr); i++ {
 		if text[i:i+len(substr)] == substr {
 			return i
@@ -511,7 +476,7 @@ func findSubstring(text, substr string) int {
 	return -1
 }
 
-// findLastChar finds the last occurrence of char in text
+// findLastChar finds the last occurrence of char in text.
 func findLastChar(text string, char byte) int {
 	for i := len(text) - 1; i >= 0; i-- {
 		if text[i] == char {
@@ -521,7 +486,7 @@ func findLastChar(text string, char byte) int {
 	return -1
 }
 
-// mapFileExtensionToLanguage maps file extensions to programming languages
+// mapFileExtensionToLanguage maps file extensions to programming languages.
 func mapFileExtensionToLanguage(ext string) string {
 	languageMap := map[string]string{
 		"go":     "go",
@@ -558,121 +523,122 @@ func mapFileExtensionToLanguage(ext string) string {
 		"bat":    "batch",
 		"cmd":    "batch",
 	}
-	
+
 	if language, exists := languageMap[ext]; exists {
 		return language
 	}
 	return "unknown"
 }
-// tryUIAutomationExtraction attempts to extract information using UI Automation
-func (m *Marshaler) tryUIAutomationExtraction(windowInfo *WindowInfo) error {
+
+// tryUIAutomationExtraction attempts to extract information using UI Automation.
+func (m *Marshaler) tryUIAutomationExtraction(windowInfo *capture.WindowInfo) error {
 	// This is where we would implement actual UI Automation extraction
 	// For now, simulate the attempt and potential failure
-	
+
 	// Simulate UI Automation availability check
-	if windowInfo.AppType == AppTypeUnknown {
+	if windowInfo.AppType == capture.AppTypeUnknown {
 		return fmt.Errorf("UI Automation not available for unknown application type")
 	}
-	
+
 	// Simulate extraction based on app type
 	switch windowInfo.AppType {
-	case AppTypeVSCode:
+	case capture.AppTypeVSCode:
 		return m.tryVSCodeUIAutomation(windowInfo)
-	case AppTypeChrome:
+	case capture.AppTypeChrome:
 		return m.tryChromeUIAutomation(windowInfo)
-	case AppTypeEdge:
+	case capture.AppTypeEdge:
 		return m.tryEdgeUIAutomation(windowInfo)
-	case AppTypeSlack:
+	case capture.AppTypeSlack:
 		return m.trySlackUIAutomation(windowInfo)
 	default:
 		return fmt.Errorf("UI Automation not implemented for app type: %s", windowInfo.AppType.String())
 	}
 }
 
-// tryVSCodeUIAutomation attempts VS Code specific UI Automation extraction
-func (m *Marshaler) tryVSCodeUIAutomation(windowInfo *WindowInfo) error {
+// tryVSCodeUIAutomation attempts VS Code specific UI Automation extraction.
+func (m *Marshaler) tryVSCodeUIAutomation(windowInfo *capture.WindowInfo) error {
 	// In a real implementation, this would:
 	// 1. Get IUIAutomationElement from window handle
 	// 2. Navigate to tab bar to find active tab
 	// 3. Extract file name from tab text
 	// 4. Navigate to status bar to get language and git branch
 	// 5. Use accessibility patterns to get text content
-	
+
 	// For now, simulate success/failure based on window title availability
 	if windowInfo.WindowTitle == "" {
 		return fmt.Errorf("cannot extract VS Code info: window title empty")
 	}
-	
+
 	// Enhanced metadata would be set here
 	windowInfo.Metadata["uia_vscode_extraction"] = "simulated"
 	return nil
 }
 
-// tryChromeUIAutomation attempts Chrome specific UI Automation extraction
-func (m *Marshaler) tryChromeUIAutomation(windowInfo *WindowInfo) error {
+// tryChromeUIAutomation attempts Chrome specific UI Automation extraction.
+func (m *Marshaler) tryChromeUIAutomation(windowInfo *capture.WindowInfo) error {
 	// In a real implementation, this would:
 	// 1. Get IUIAutomationElement from window handle
 	// 2. Navigate to address bar (Omnibox)
 	// 3. Extract URL from address bar value
 	// 4. Get page title from document
 	// 5. Handle multiple tabs if present
-	
+
 	// For now, simulate success/failure
 	if windowInfo.WindowTitle == "" {
 		return fmt.Errorf("cannot extract Chrome info: window title empty")
 	}
-	
+
 	windowInfo.Metadata["uia_chrome_extraction"] = "simulated"
 	return nil
 }
 
-// tryEdgeUIAutomation attempts Edge specific UI Automation extraction
-func (m *Marshaler) tryEdgeUIAutomation(windowInfo *WindowInfo) error {
+// tryEdgeUIAutomation attempts Edge specific UI Automation extraction.
+func (m *Marshaler) tryEdgeUIAutomation(windowInfo *capture.WindowInfo) error {
 	// Similar to Chrome implementation
 	if windowInfo.WindowTitle == "" {
 		return fmt.Errorf("cannot extract Edge info: window title empty")
 	}
-	
+
 	windowInfo.Metadata["uia_edge_extraction"] = "simulated"
 	return nil
 }
 
-// trySlackUIAutomation attempts Slack specific UI Automation extraction
-func (m *Marshaler) trySlackUIAutomation(windowInfo *WindowInfo) error {
+// trySlackUIAutomation attempts Slack specific UI Automation extraction.
+func (m *Marshaler) trySlackUIAutomation(windowInfo *capture.WindowInfo) error {
 	// In a real implementation, this would:
 	// 1. Get IUIAutomationElement from window handle
 	// 2. Navigate to channel header
 	// 3. Extract channel name and workspace
 	// 4. Get current conversation context
-	
+
 	if windowInfo.WindowTitle == "" {
 		return fmt.Errorf("cannot extract Slack info: window title empty")
 	}
-	
+
 	windowInfo.Metadata["uia_slack_extraction"] = "simulated"
 	return nil
 }
 
-// ShouldFallbackToOCR determines if OCR fallback should be used
-func (m *Marshaler) ShouldFallbackToOCR(windowInfo *WindowInfo) bool {
+// ShouldFallbackToOCR determines if OCR fallback should be used.
+func (m *Marshaler) ShouldFallbackToOCR(windowInfo *capture.WindowInfo) bool {
 	if windowInfo == nil {
 		return true
 	}
-	
+
 	// Check if UI Automation extraction failed
 	if failed, exists := windowInfo.Metadata["uia_extraction_failed"]; exists && failed.(bool) {
 		return true
 	}
-	
+
 	// Check if basic info extraction failed
 	if failed, exists := windowInfo.Metadata["basic_info_failed"]; exists && failed.(bool) {
 		return true
 	}
-	
+
 	// Check if app type is unknown (no structured extraction available)
-	if windowInfo.AppType == AppTypeUnknown {
+	if windowInfo.AppType == capture.AppTypeUnknown {
 		return true
 	}
-	
+
 	return false
 }

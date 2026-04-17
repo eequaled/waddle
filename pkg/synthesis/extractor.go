@@ -46,7 +46,7 @@ func (e *Extractor) Extract(text string) []Entity {
 	for entityType, pattern := range e.patterns {
 		matches := pattern.FindAllString(text, -1)
 		for _, match := range matches {
-			key := strings.ToLower(match)
+			key := string(entityType) + ":" + strings.ToLower(match)
 			if entity, exists := entityCounts[key]; exists {
 				entity.Count++
 			} else {

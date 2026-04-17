@@ -396,7 +396,7 @@ func (s *Server) handleAppDetails(w http.ResponseWriter, r *http.Request) {
 			FROM manual_notes
 			WHERE session_id = ?
 			ORDER BY created_at ASC
-		`, session.ID)
+		`, int64(session.ID))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -552,7 +552,7 @@ func (s *Server) handleSessionUpdate(w http.ResponseWriter, r *http.Request, dat
 		return
 	}
 
-	if err := s.upsertManualNotes(session.ID, metadata.ManualNotes); err != nil {
+	if err := s.upsertManualNotes(int64(session.ID), metadata.ManualNotes); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -2,18 +2,18 @@
 
 package platform
 
-import "waddle/pkg/capture/uia"
+import capwin "waddle/pkg/capture/windows"
 
-// windowsUIReader bridges the uia.Reader to the platform.UIReader interface.
-// uia.NewReader() creates its own Marshaler internally (STA COM thread).
+// windowsUIReader bridges the capwin.Reader to the platform.UIReader interface.
+// capwin.NewReader() creates its own Marshaler internally (STA COM thread).
 // Close() delegates to reader.Close() → marshaler.Close(), so the entire
 // STA lifecycle is self-contained.
 type windowsUIReader struct {
-	reader *uia.Reader
+	reader *capwin.Reader
 }
 
 func newWindowsUIReader() (*windowsUIReader, error) {
-	r, err := uia.NewReader()
+	r, err := capwin.NewReader()
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +33,7 @@ func (w *windowsUIReader) GetStructuredData(hwnd uintptr) (*UIResult, error) {
 		ProcessID:   info.ProcessID,
 		ProcessName: info.ProcessName,
 		WindowTitle: info.WindowTitle,
-		AppType:     info.AppType.String(), // uia.AppType → string
+		AppType:     info.AppType.String(), // capture.AppType → string
 		Metadata:    info.Metadata,
 	}, nil
 }

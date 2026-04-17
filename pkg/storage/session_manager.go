@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"waddle/pkg/types"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -315,8 +317,8 @@ func (sm *SessionManager) SemanticSearch(query string, topK int, dateRange *Date
 	sessionIDs := make([]int64, len(vectorResults))
 	scoreMap := make(map[int64]float32)
 	for i, result := range vectorResults {
-		sessionIDs[i] = result.SessionID
-		scoreMap[result.SessionID] = result.Score
+		sessionIDs[i] = int64(result.SessionID)
+		scoreMap[int64(result.SessionID)] = result.Score
 	}
 
 	// Build SQL query to fetch session metadata
@@ -358,7 +360,7 @@ func (sm *SessionManager) SemanticSearch(query string, topK int, dateRange *Date
 	defer rows.Close()
 
 	var results []SearchResult
-	sessionMap := make(map[int64]Session)
+	sessionMap := make(map[types.SessionID]Session)
 
 	// Fetch session data
 	for rows.Next() {

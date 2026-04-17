@@ -773,7 +773,7 @@ func TestPropertySemanticSearchDateFiltering(t *testing.T) {
 
 		// Store embeddings for semantic search (using mock embeddings)
 		embedding := createNormalizedEmbedding(EmbeddingDimensions)
-		err = vm.StoreEmbedding(session.ID, embedding)
+		err = vm.StoreEmbedding(int64(session.ID), embedding)
 		if err != nil {
 			t.Fatalf("Failed to store embedding for session %s: %v", session.Date, err)
 		}
@@ -812,14 +812,14 @@ func TestPropertySemanticSearchDateFiltering(t *testing.T) {
 			expectedSessionIDs := make(map[int64]bool)
 			for _, session := range testSessions {
 				if session.Date >= dateRange.StartDate && session.Date <= dateRange.EndDate {
-					expectedSessionIDs[session.ID] = true
+					expectedSessionIDs[int64(session.ID)] = true
 				}
 			}
 
 			// Filter vector results by expected session IDs
 			var filteredVectorResults []VectorSearchResult
 			for _, vr := range vectorResults {
-				if expectedSessionIDs[vr.SessionID] {
+				if expectedSessionIDs[int64(vr.SessionID)] {
 					filteredVectorResults = append(filteredVectorResults, vr)
 				}
 			}
@@ -834,7 +834,7 @@ func TestPropertySemanticSearchDateFiltering(t *testing.T) {
 
 			sessionIDs := make([]int64, len(filteredVectorResults))
 			for i, result := range filteredVectorResults {
-				sessionIDs[i] = result.SessionID
+				sessionIDs[i] = int64(result.SessionID)
 			}
 
 			// Test the date filtering SQL logic
@@ -978,7 +978,7 @@ func TestPropertySearchMatchesEntities(t *testing.T) {
 			}
 
 			// Clean up - delete the session
-			err = sm.DeleteByID(session.ID)
+			err = sm.DeleteByID(int64(session.ID))
 			if err != nil {
 				t.Logf("Failed to delete session: %v", err)
 				// Don't fail the test for cleanup issues

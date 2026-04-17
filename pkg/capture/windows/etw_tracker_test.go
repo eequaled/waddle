@@ -1,9 +1,11 @@
 //go:build windows
 
-package etw
+package windows
 
 import (
 	"testing"
+
+	"waddle/pkg/capture"
 
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
@@ -20,7 +22,7 @@ func TestETWFallbackToPolling(t *testing.T) {
 	properties.Property("For any ETW initialization failure, system should activate polling mode", prop.ForAll(
 		func(dummy bool) bool {
 			// Create consumer - this may fail due to ETW not being available or insufficient privileges
-			consumer, err := NewConsumer()
+			consumer, err := NewETWTracker()
 			
 			// If ETW initialization fails, consumer should be in fallback mode
 			if err != nil {
@@ -68,7 +70,7 @@ func TestETWFallbackToPolling(t *testing.T) {
 
 // TestETWConsumerBasicFunctionality tests basic consumer functionality
 func TestETWConsumerBasicFunctionality(t *testing.T) {
-	consumer, err := NewConsumer()
+	consumer, err := NewETWTracker()
 	if err != nil {
 		// ETW failed - this is expected on systems without admin privileges
 		t.Logf("ETW initialization failed (expected on non-admin): %v", err)
@@ -102,7 +104,7 @@ func TestETWConsumerBasicFunctionality(t *testing.T) {
 
 // TestETWConsumerStartStop tests consumer start/stop functionality
 func TestETWConsumerStartStop(t *testing.T) {
-	consumer, err := NewConsumer()
+	consumer, err := NewETWTracker()
 	if err != nil {
 		t.Logf("ETW initialization failed (expected on non-admin): %v", err)
 		// Still test start/stop in fallback mode
@@ -131,7 +133,7 @@ func TestETWConsumerStartStop(t *testing.T) {
 
 // TestETWEventBuffering tests event buffering and backpressure
 func TestETWEventBuffering(t *testing.T) {
-	consumer, err := NewConsumer()
+	consumer, err := NewETWTracker()
 	if err != nil {
 		t.Logf("ETW initialization failed (expected on non-admin): %v", err)
 	}
@@ -140,12 +142,12 @@ func TestETWEventBuffering(t *testing.T) {
 	
 	// Test that channels have correct buffer size
 	focusChan := consumer.FocusEvents()
-	if cap(focusChan) != EventBufferSize {
-		t.Errorf("FocusEvents channel buffer size should be %d, got %d", EventBufferSize, cap(focusChan))
+	if cap(focusChan) != capture.EventBufferSize {
+		t.Errorf("FocusEvents channel buffer size should be %d, got %d", capture.EventBufferSize, cap(focusChan))
 	}
 	
 	processChan := consumer.ProcessEvents()
-	if cap(processChan) != EventBufferSize {
-		t.Errorf("ProcessEvents channel buffer size should be %d, got %d", EventBufferSize, cap(processChan))
+	if cap(processChan) != capture.EventBufferSize {
+		t.Errorf("ProcessEvents channel buffer size should be %d, got %d", capture.EventBufferSize, cap(processChan))
 	}
 }

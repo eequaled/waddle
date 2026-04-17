@@ -5,14 +5,30 @@ import (
 	"reflect"
 	"time"
 
+	"waddle/pkg/types"
+
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 )
 
+// genSessionID generates random types.SessionID values.
+func genSessionID() gopter.Gen {
+	return gen.Int64Range(1, 1000000).Map(func(id int64) types.SessionID {
+		return types.SessionID(id)
+	})
+}
+
+// genElementID generates random types.ElementID values.
+func genElementID() gopter.Gen {
+	return gen.Int64Range(1, 1000000).Map(func(id int64) types.ElementID {
+		return types.ElementID(id)
+	})
+}
+
 // GenSession generates random Session instances for property testing.
 func GenSession() gopter.Gen {
 	return gen.Struct(reflect.TypeOf(Session{}), map[string]gopter.Gen{
-		"ID":              gen.Int64Range(1, 1000000),
+		"ID":              genSessionID(),
 		"Date":            GenDateString(),
 		"CustomTitle":     gen.AnyString(),
 		"CustomSummary":   gen.AnyString(),
@@ -26,8 +42,8 @@ func GenSession() gopter.Gen {
 // GenActivityBlock generates random ActivityBlock instances for property testing.
 func GenActivityBlock() gopter.Gen {
 	return gen.Struct(reflect.TypeOf(ActivityBlock{}), map[string]gopter.Gen{
-		"ID":            gen.Int64Range(1, 1000000),
-		"AppActivityID": gen.Int64Range(1, 1000000),
+		"ID":            genElementID(),
+		"AppActivityID": genElementID(),
 		"BlockID":       GenBlockID(),
 		"StartTime":     GenTime(),
 		"EndTime":       GenTime(),
@@ -39,8 +55,8 @@ func GenActivityBlock() gopter.Gen {
 // GenAppActivity generates random AppActivity instances for property testing.
 func GenAppActivity() gopter.Gen {
 	return gen.Struct(reflect.TypeOf(AppActivity{}), map[string]gopter.Gen{
-		"ID":        gen.Int64Range(1, 1000000),
-		"SessionID": gen.Int64Range(1, 1000000),
+		"ID":        genElementID(),
+		"SessionID": genSessionID(),
 		"AppName":   GenAppName(),
 		"CreatedAt": GenTime(),
 		"UpdatedAt": GenTime(),
@@ -50,8 +66,8 @@ func GenAppActivity() gopter.Gen {
 // GenChatMessage generates random ChatMessage instances for property testing.
 func GenChatMessage() gopter.Gen {
 	return gen.Struct(reflect.TypeOf(ChatMessage{}), map[string]gopter.Gen{
-		"ID":        gen.Int64Range(1, 1000000),
-		"SessionID": gen.Int64Range(1, 1000000),
+		"ID":        genElementID(),
+		"SessionID": genSessionID(),
 		"Role":      GenChatRole(),
 		"Content":   gen.AnyString(),
 		"Timestamp": GenTime(),

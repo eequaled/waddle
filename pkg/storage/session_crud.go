@@ -3,6 +3,8 @@ package storage
 import (
 	"database/sql"
 	"time"
+
+	"waddle/pkg/types"
 )
 
 // Create creates a new session in the database.
@@ -78,7 +80,7 @@ func (sm *SessionManager) Create(session *Session) error {
 		return NewStorageError(ErrDatabase, "failed to get last insert id", err)
 	}
 
-	session.ID = id
+	session.ID = types.SessionID(id)
 	return nil
 }
 

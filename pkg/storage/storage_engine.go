@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"waddle/pkg/types"
 )
 
 // StorageEngine is the central coordinator that provides a unified interface for all storage operations.
@@ -121,7 +123,7 @@ func (se *StorageEngine) UpdateSession(session *Session) error {
 	// Update embedding if text content changed
 	if session.CustomSummary != "" || session.OriginalSummary != "" || session.ExtractedText != "" {
 		text := session.CustomSummary + " " + session.OriginalSummary + " " + session.ExtractedText
-		if err := se.vectorMgr.QueueEmbedding(session.ID, text); err != nil {
+		if err := se.vectorMgr.QueueEmbedding(int64(session.ID), text); err != nil {
 			// Log error but don't fail the update
 			// In a production system, you'd want proper logging here
 		}
@@ -143,7 +145,7 @@ func (se *StorageEngine) DeleteSession(date string) error {
 		return err
 	}
 
-	if err := se.vectorMgr.DeleteEmbedding(session.ID); err != nil {
+	if err := se.vectorMgr.DeleteEmbedding(int64(session.ID)); err != nil {
 		// Log error but continue - vector might not exist
 	}
 
@@ -181,7 +183,7 @@ func (se *StorageEngine) AddActivityBlock(sessionDate, appName string, block *Ac
 		return err
 	}
 
-	return se.sessionMgr.AddBlock(session.ID, appName, block)
+	return se.sessionMgr.AddBlock(int64(session.ID), appName, block)
 }
 
 // GetActivityBlocks retrieves activity blocks for a session and app.
@@ -192,7 +194,7 @@ func (se *StorageEngine) GetActivityBlocks(sessionDate, appName string) ([]Activ
 		return nil, err
 	}
 
-	return se.sessionMgr.GetBlocks(session.ID, appName)
+	return se.sessionMgr.GetBlocks(int64(session.ID), appName)
 }
 
 // GetSessionAppActivities retrieves app activity summaries for a session.
@@ -203,7 +205,7 @@ func (se *StorageEngine) GetSessionAppActivities(sessionDate string) ([]AppActiv
 		return nil, err
 	}
 
-	return se.sessionMgr.GetAppActivities(session.ID)
+	return se.sessionMgr.GetAppActivities(int64(session.ID))
 }
 
 // Chat operations
@@ -216,7 +218,7 @@ func (se *StorageEngine) AddChat(sessionDate string, chat *ChatMessage) error {
 		return err
 	}
 
-	return se.sessionMgr.AddChat(session.ID, chat)
+	return se.sessionMgr.AddChat(int64(session.ID), chat)
 }
 
 // GetChats retrieves chat messages for a session.
@@ -227,7 +229,7 @@ func (se *StorageEngine) GetChats(sessionDate string) ([]ChatMessage, error) {
 		return nil, err
 	}
 
-	return se.sessionMgr.GetChats(session.ID)
+	return se.sessionMgr.GetChats(int64(session.ID))
 }
 
 // Notification operations
@@ -370,8 +372,8 @@ func (se *StorageEngine) GetPendingSessionsCount() (int, error) {
 }
 
 // UpdateSessionSynthesis updates the synthesis-related fields of a session.
-func (se *StorageEngine) UpdateSessionSynthesis(sessionID int64, entitiesJSON, synthesisStatus, aiSummary, aiBullets string) error {
-	return se.sessionMgr.UpdateSessionSynthesis(sessionID, entitiesJSON, synthesisStatus, aiSummary, aiBullets)
+func (se *StorageEngine) UpdateSessionSynthesis(sessionID types.SessionID, entitiesJSON, synthesisStatus, aiSummary, aiBullets string) error {
+	return se.sessionMgr.UpdateSessionSynthesis(int64(sessionID), entitiesJSON, synthesisStatus, aiSummary, aiBullets)
 }
 
 // Knowledge Card operations
@@ -395,7 +397,7 @@ func (se *StorageEngine) CreateKnowledgeCard(card *KnowledgeCard) error {
 		return NewStorageError(ErrDatabase, "failed to get knowledge card ID", err)
 	}
 
-	card.ID = id
+	card.ID = types.ElementID(id)
 	return nil
 }
 
@@ -444,7 +446,7 @@ func (se *StorageEngine) GetKnowledgeCards(status string, limit int) ([]Knowledg
 }
 
 // GetKnowledgeCardsBySession retrieves knowledge cards for a specific session.
-func (se *StorageEngine) GetKnowledgeCardsBySession(sessionID int64) ([]KnowledgeCard, error) {
+func (se *StorageEngine) GetKnowledgeCardsBySession(sessionID types.SessionID) ([]KnowledgeCard, error) {
 	rows, err := se.sessionMgr.DB().Query(`
 		SELECT id, session_id, title, bullets, entities, status, created_at, updated_at
 		FROM knowledge_cards 

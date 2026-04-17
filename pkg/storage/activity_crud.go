@@ -3,6 +3,8 @@ package storage
 import (
 	"database/sql"
 	"time"
+
+	"waddle/pkg/types"
 )
 
 // AddBlock adds an activity block to a session's app activity.
@@ -71,9 +73,9 @@ func (sm *SessionManager) AddBlock(sessionID int64, appName string, block *Activ
 
 	id, err := result.LastInsertId()
 	if err == nil && id > 0 {
-		block.ID = id
+		block.ID = types.ElementID(id)
 	}
-	block.AppActivityID = appActivityID
+	block.AppActivityID = types.ElementID(appActivityID)
 
 	return nil
 }
@@ -259,8 +261,8 @@ func (sm *SessionManager) AddChat(sessionID int64, chat *ChatMessage) error {
 		return NewStorageError(ErrDatabase, "failed to get last insert id", err)
 	}
 
-	chat.ID = id
-	chat.SessionID = sessionID
+	chat.ID = types.ElementID(id)
+	chat.SessionID = types.SessionID(sessionID)
 	return nil
 }
 

@@ -2,15 +2,15 @@
 
 package platform
 
-import "waddle/pkg/capture"
+import capwin "waddle/pkg/capture/windows"
 
-// windowsScreenCapturer delegates to the capture package's screenshot functions.
+// windowsScreenCapturer delegates to the capture/windows package's screenshot functions.
 type windowsScreenCapturer struct{}
 
 func (w *windowsScreenCapturer) CaptureWindow(hwnd uintptr) ([]byte, error) {
-	return capture.CaptureWindowAsPNG(hwnd)
+	return capwin.CaptureWindowAsPNG(hwnd)
 }
 
 func (w *windowsScreenCapturer) CaptureScreen() ([]byte, error) {
-	return capture.CaptureFullScreen()
+	return capwin.CaptureFullScreen()
 }

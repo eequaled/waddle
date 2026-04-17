@@ -2,137 +2,47 @@ package storage
 
 import (
 	"time"
+
+	"waddle/pkg/types"
 )
 
-// Session represents a date-based collection of app activities.
-type Session struct {
-	ID              int64         `json:"id"`
-	Date            string        `json:"date"` // Format: "2006-01-02"
-	CustomTitle     string        `json:"customTitle"`
-	CustomSummary   string        `json:"customSummary"`
-	OriginalSummary string        `json:"originalSummary"`
-	ExtractedText   string        `json:"-"` // Encrypted, not in JSON response
-	CreatedAt       time.Time     `json:"createdAt"`
-	UpdatedAt       time.Time     `json:"updatedAt"`
+// ════════════════════════════════════════════════════════════════════════
+// TYPE ALIASES — Re-exported from pkg/types (single source of truth).
+// Using type aliases (=) means storage.Session IS types.Session,
+// zero code changes needed at call sites, no marshaling differences.
+// ════════════════════════════════════════════════════════════════════════
 
-	// Synthesis columns (P1 requirements)
-	EntitiesJSON      string `json:"entitiesJson"`      // JSON array of extracted entities
-	SynthesisStatus   string `json:"synthesisStatus"`   // "pending", "completed", "failed"
-	AISummary         string `json:"aiSummary"`         // AI-generated summary
-	AIBullets         string `json:"aiBullets"`         // JSON array of 3 bullet points
+type Session = types.Session
+type AppActivity = types.AppActivity
+type ActivityBlock = types.ActivityBlock
+type ChatMessage = types.ChatMessage
+type ManualNote = types.ManualNote
+type KnowledgeCard = types.KnowledgeCard
+type Notification = types.Notification
+type SearchResult = types.SearchResult
+type VectorSearchResult = types.VectorSearchResult
+type DateRange = types.DateRange
+type Entity = types.Entity
+type EntityType = types.EntityType
 
-	// Relationships (loaded on demand)
-	Activities  []AppActivity `json:"activities,omitempty"`
-	ManualNotes []ManualNote  `json:"manualNotes,omitempty"`
-}
-
-// AppActivity represents activity data for a specific application within a session.
-type AppActivity struct {
-	ID        int64     `json:"id"`
-	SessionID int64     `json:"sessionId"`
-	AppName   string    `json:"appName"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-
-	// Relationships
-	Blocks []ActivityBlock `json:"blocks,omitempty"`
-}
-
-// ActivityBlock represents a time-bounded chunk of OCR text with AI-generated summary.
-type ActivityBlock struct {
-	ID            int64     `json:"id"`
-	AppActivityID int64     `json:"appActivityId"`
-	BlockID       string    `json:"blockId"` // Format: "HH-MM" (e.g., "15-04")
-	StartTime     time.Time `json:"startTime"`
-	EndTime       time.Time `json:"endTime"`
-	OCRText       string    `json:"ocrText"`      // Encrypted in DB
-	MicroSummary  string    `json:"microSummary"`
-
-	// Capture columns (P0 requirements)
-	CaptureSource      string `json:"captureSource"`      // "etw_uia", "uia_fallback", "polling_ocr"
-	StructuredMetadata string `json:"structuredMetadata"` // JSON object with app-specific data
-}
-
-// ChatMessage represents a chat message in a session.
-type ChatMessage struct {
-	ID        int64     `json:"id"`
-	SessionID int64     `json:"sessionId"`
-	Role      string    `json:"role"` // "user" or "assistant"
-	Content   string    `json:"content"` // Encrypted in DB
-	Timestamp time.Time `json:"timestamp"`
-}
-
-// ChatRole constants for validation.
+// Re-export chat role constants from types.
 const (
-	ChatRoleUser      = "user"
-	ChatRoleAssistant = "assistant"
+	ChatRoleUser      = types.ChatRoleUser
+	ChatRoleAssistant = types.ChatRoleAssistant
 )
 
-// ValidChatRoles contains all valid chat roles.
-var ValidChatRoles = map[string]bool{
-	ChatRoleUser:      true,
-	ChatRoleAssistant: true,
-}
+// Re-export ValidChatRoles from types.
+var ValidChatRoles = types.ValidChatRoles
 
-// Notification represents a system notification.
-type Notification struct {
-	ID         string    `json:"id"`
-	Type       string    `json:"type"`
-	Title      string    `json:"title"`
-	Message    string    `json:"message"`
-	Timestamp  time.Time `json:"timestamp"`
-	Read       bool      `json:"read"`
-	SessionRef string    `json:"sessionRef,omitempty"`
-	Metadata   string    `json:"metadata,omitempty"` // JSON string
-}
-
-// ManualNote represents a user-created note within a session.
-type ManualNote struct {
-	ID        int64     `json:"id"`
-	SessionID int64     `json:"sessionId"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-}
-
-// KnowledgeCard represents an AI-generated summary card for a session.
-type KnowledgeCard struct {
-	ID        int64     `json:"id"`
-	SessionID int64     `json:"sessionId"`
-	Title     string    `json:"title"`
-	Bullets   string    `json:"bullets"`   // JSON array of 3 bullet points
-	Entities  string    `json:"entities"`  // JSON array of extracted entities
-	Status    string    `json:"status"`    // "pending", "completed", "failed"
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-}
-
-// SearchResult represents a search result from full-text or semantic search.
-type SearchResult struct {
-	Session   Session `json:"session"`
-	Score     float32 `json:"score"`     // Relevance/similarity score
-	Snippet   string  `json:"snippet"`   // Highlighted text snippet
-	MatchType string  `json:"matchType"` // "fulltext" or "semantic"
-}
-
-// SearchMatchType constants.
+// Re-export search match type constants from types.
 const (
-	MatchTypeFullText = "fulltext"
-	MatchTypeSemantic = "semantic"
+	MatchTypeFullText = types.MatchTypeFullText
+	MatchTypeSemantic = types.MatchTypeSemantic
 )
 
-// VectorSearchResult represents a result from LanceDB semantic search.
-type VectorSearchResult struct {
-	SessionID    int64   `json:"sessionId"`
-	Score        float32 `json:"score"` // Cosine similarity
-	ModelVersion string  `json:"modelVersion"`
-}
-
-// DateRange represents a date range filter for searches.
-type DateRange struct {
-	StartDate string `json:"startDate"` // Format: "2006-01-02"
-	EndDate   string `json:"endDate"`   // Format: "2006-01-02"
-}
+// ════════════════════════════════════════════════════════════════════════
+// STORAGE-SPECIFIC TYPES — These belong only in the storage layer.
+// ════════════════════════════════════════════════════════════════════════
 
 // StorageStats represents storage usage statistics.
 type StorageStats struct {

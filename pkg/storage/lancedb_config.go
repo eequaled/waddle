@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"waddle/pkg/types"
 )
 
 // LanceDBConfig holds configuration for LanceDB optimization.
@@ -239,7 +241,7 @@ func (ovm *OptimizedVectorManager) SearchOptimized(queryEmbedding []float32, top
 		modelVersion := r.Metadata["model_version"]
 		
 		searchResults = append(searchResults, VectorSearchResult{
-			SessionID:    sessionID,
+			SessionID:    types.SessionID(sessionID),
 			Score:        r.Similarity,
 			ModelVersion: modelVersion,
 		})
