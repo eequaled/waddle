@@ -9,6 +9,7 @@ import (
 	"waddle/pkg/infra/config"
 	"waddle/pkg/pipeline"
 	"waddle/pkg/platform"
+	"waddle/pkg/server"
 	"waddle/pkg/storage"
 	"waddle/pkg/synthesis"
 )
@@ -74,6 +75,13 @@ func (a *App) startup(ctx context.Context) {
 		if err := a.pipeline.Start(); err != nil {
 			log.Printf("Error starting capture pipeline: %v\n", err)
 		}
+	}
+
+	// 6. Start API Server to serve frontend requests
+	if a.storage != nil {
+		apiServer := server.NewServer(a.cfg.DataDir, a.cfg.Port, a.isPaused, a.storage)
+		apiServer.Start()
+		log.Printf("API Server started on port %s\n", a.cfg.Port)
 	}
 
 	log.Println("Waddle subsystems started successfully")
