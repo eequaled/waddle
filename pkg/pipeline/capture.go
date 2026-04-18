@@ -100,7 +100,9 @@ func (p *Pipeline) Start() error {
 	}
 
 	// Start routing and processing
-	p.router.Start(p.ctx)
+	if err := p.router.Start(p.ctx); err != nil {
+		return fmt.Errorf("failed to start event router: %w", err)
+	}
 	p.screenshotProc.Start(p.ctx)
 
 	p.running = true

@@ -11,6 +11,7 @@ require (
 	github.com/philippgille/chromem-go v0.7.0
 	github.com/tekert/golang-etw v0.6.2
 	github.com/wailsapp/wails/v2 v2.11.0
+	github.com/yalue/onnxruntime_go v1.27.0
 	golang.org/x/crypto v0.50.0
 	golang.org/x/image v0.12.0
 	golang.org/x/sys v0.43.0
@@ -49,7 +50,6 @@ require (
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/wailsapp/go-webview2 v1.0.22 // indirect
 	github.com/wailsapp/mimetype v1.4.1 // indirect
-	github.com/yalue/onnxruntime_go v1.27.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect

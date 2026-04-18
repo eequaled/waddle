@@ -2,7 +2,9 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"waddle/pkg/capture"
@@ -28,6 +30,8 @@ type EventRouter struct {
 	screenshotQ chan ScreenshotRequest // buffered, 100
 	stopCh      chan struct{}
 	wg          sync.WaitGroup
+	started     atomic.Bool
+	stopOnce    sync.Once
 }
 
 // NewEventRouter creates a new EventRouter.
@@ -40,8 +44,11 @@ func NewEventRouter(engine capture.CaptureEngine) *EventRouter {
 	}
 }
 
-// AddProcessor registers an EventProcessor.
+// AddProcessor registers an EventProcessor. Must be called before Start().
 func (r *EventRouter) AddProcessor(p EventProcessor) {
+	if r.started.Load() {
+		panic("cannot add processor to an already started EventRouter")
+	}
 	r.processors = append(r.processors, p)
 }
 
@@ -51,15 +58,22 @@ func (r *EventRouter) ScreenshotQueue() chan ScreenshotRequest {
 }
 
 // Start begins reading events from the CaptureEngine.
-func (r *EventRouter) Start(ctx context.Context) {
+func (r *EventRouter) Start(ctx context.Context) error {
+	if r.started.Swap(true) {
+		return fmt.Errorf("EventRouter already started")
+	}
+
 	r.wg.Add(2)
 	go r.routeFocusEvents(ctx)
 	go r.routeProcessEvents(ctx)
+	return nil
 }
 
 // Stop gracefully stops the router.
 func (r *EventRouter) Stop() {
-	close(r.stopCh)
+	r.stopOnce.Do(func() {
+		close(r.stopCh)
+	})
 	r.wg.Wait()
 }
 

@@ -34,7 +34,10 @@ func TestEventRouter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	router.Start(ctx)
+	err := router.Start(ctx)
+	if err != nil {
+		t.Fatalf("Failed to start router: %v", err)
+	}
 
 	// Send events
 	mockEngine.focusEvents <- capture.FocusEvent{WindowHandle: 1}
@@ -166,4 +169,42 @@ func TestFocusProcessorBackpressure(t *testing.T) {
 	if secondReq.HWND != 102 {
 		t.Errorf("Expected newest item to be HWND 102, got %d", secondReq.HWND)
 	}
+}
+
+func TestEventRouterDuplicateStart(t *testing.T) {
+	mockEngine := NewMockCaptureEngine()
+	router := NewEventRouter(mockEngine)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := router.Start(ctx)
+	if err != nil {
+		t.Fatalf("Expected nil error on first Start, got %v", err)
+	}
+
+	err = router.Start(ctx)
+	if err == nil {
+		t.Errorf("Expected error on second Start, got nil")
+	}
+
+	router.Stop()
+}
+
+func TestEventRouterLateAddProcessor(t *testing.T) {
+	mockEngine := NewMockCaptureEngine()
+	router := NewEventRouter(mockEngine)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_ = router.Start(ctx)
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("The code did not panic")
+		}
+		router.Stop()
+	}()
+
+	processor := &mockProcessor{}
+	router.AddProcessor(processor) // should panic
 }

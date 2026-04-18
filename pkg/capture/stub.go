@@ -12,8 +12,8 @@ type StubCaptureEngine struct {
 // NewStubCaptureEngine creates a stub capture engine that returns errors.
 func NewStubCaptureEngine() *StubCaptureEngine {
 	return &StubCaptureEngine{
-		fEvents: make(chan FocusEvent),
-		pEvents: make(chan ProcessEvent),
+		fEvents: make(chan FocusEvent, EventBufferSize),
+		pEvents: make(chan ProcessEvent, EventBufferSize),
 	}
 }
 

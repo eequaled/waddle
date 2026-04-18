@@ -17,6 +17,17 @@ import (
 	"waddle/pkg/types"
 )
 
+// ortInitOnce guards the process-global ONNX Runtime environment.
+// ort.InitializeEnvironment() and ort.DestroyEnvironment() are process-global:
+// calling InitializeEnvironment twice panics, and calling DestroyEnvironment
+// while another FlorenceEngine is in use causes a use-after-free.
+// Solution: initialize once at first engine creation; let the OS reclaim memory
+// at process exit (documented below in Close).
+var (
+	ortInitOnce sync.Once
+	ortInitErr  error
+)
+
 // TODO: Replace with actual tensor names from Florence-2 ONNX export.
 // Input names can be found by running: python -c "import onnx; m = onnx.load('model.onnx'); print([i.name for i in m.graph.input])"
 const inputName = "TODO_INPUT"   // Expected: "pixel_values"
@@ -52,15 +63,19 @@ func NewFlorenceEngine(modelPath string, dllPath string) (*FlorenceEngine, error
 		ort.SetSharedLibraryPath(dllPath)
 	}
 
-	// Initialize ONNX Runtime environment
-	if err := ort.InitializeEnvironment(); err != nil {
-		return nil, fmt.Errorf("failed to initialize ONNX Runtime: %w", err)
+	// Initialize ONNX Runtime environment exactly once per process.
+	// ort.InitializeEnvironment is NOT safe to call multiple times.
+	ortInitOnce.Do(func() {
+		ortInitErr = ort.InitializeEnvironment()
+	})
+	if ortInitErr != nil {
+		return nil, fmt.Errorf("failed to initialize ONNX Runtime: %w", ortInitErr)
 	}
 
 	// Create session options with DirectML
 	options, err := ort.NewSessionOptions()
 	if err != nil {
-		ort.DestroyEnvironment()
+		// No DestroyEnvironment here — it's process-global and may be used by other engines.
 		return nil, fmt.Errorf("failed to create session options: %w", err)
 	}
 
@@ -74,7 +89,7 @@ func NewFlorenceEngine(modelPath string, dllPath string) (*FlorenceEngine, error
 	session, err := ort.NewAdvancedSession(modelPath, []string{inputName}, []string{outputName}, nil, nil, options)
 	if err != nil {
 		options.Destroy()
-		ort.DestroyEnvironment()
+		// No DestroyEnvironment — process-global, may be used by other engines.
 		return nil, fmt.Errorf("failed to create ONNX session (verify tensor names): %w", err)
 	}
 
@@ -154,5 +169,9 @@ func (e *FlorenceEngine) Close() error {
 		e.options = nil
 	}
 
-	return ort.DestroyEnvironment()
+	// NOTE: ort.DestroyEnvironment() is intentionally NOT called here.
+	// The ONNX Runtime environment is process-global (guarded by ortInitOnce).
+	// Calling DestroyEnvironment while another FlorenceEngine exists causes
+	// a use-after-free crash. The OS reclaims all native memory at process exit.
+	return nil
 }

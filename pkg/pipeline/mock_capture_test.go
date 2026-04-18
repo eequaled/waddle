@@ -22,8 +22,8 @@ type MockCaptureEngine struct {
 
 func NewMockCaptureEngine() *MockCaptureEngine {
 	return &MockCaptureEngine{
-		focusEvents:   make(chan capture.FocusEvent, 10),
-		processEvents: make(chan capture.ProcessEvent, 10),
+		focusEvents:   make(chan capture.FocusEvent, capture.EventBufferSize),
+		processEvents: make(chan capture.ProcessEvent, capture.EventBufferSize),
 	}
 }
 

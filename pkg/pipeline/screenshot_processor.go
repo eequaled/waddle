@@ -67,6 +67,16 @@ func (p *ScreenshotProcessor) handleScreenshotRequest(ctx context.Context, req S
 		p.mu.Unlock()
 		return
 	}
+	// Cleanup map if it grows too large (prevent unbounded growth)
+	if len(p.lastCapture) > 1000 {
+		cutoff := now.Add(-10 * time.Second)
+		for k, v := range p.lastCapture {
+			if v.Before(cutoff) {
+				delete(p.lastCapture, k)
+			}
+		}
+	}
+
 	p.lastCapture[req.HWND] = now
 	p.mu.Unlock()
 

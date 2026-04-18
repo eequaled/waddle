@@ -91,6 +91,10 @@ func (se *StorageEngine) Close() error {
 // CleanupStaleEncryptedData checks for sessions that can't be decrypted.
 // Returns count of stale sessions found.
 func (se *StorageEngine) CleanupStaleEncryptedData() (int, error) {
+	// Guard against being called before Initialize().
+	if se.sessionMgr == nil || se.encryptionMgr == nil {
+		return 0, nil
+	}
 	db := se.sessionMgr.DB()
 	rows, err := db.Query("SELECT id, extracted_text_encrypted FROM sessions WHERE extracted_text_encrypted IS NOT NULL AND extracted_text_encrypted != ''")
 	if err != nil {
