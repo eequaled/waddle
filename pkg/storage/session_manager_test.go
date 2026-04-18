@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
@@ -990,4 +991,51 @@ func TestPropertySearchMatchesEntities(t *testing.T) {
 	))
 
 	properties.TestingRun(t)
+}
+
+// BenchmarkInsertSpeed tests the insertion throughput of the optimized WAL config.
+func BenchmarkInsertSpeed(b *testing.B) {
+	tempDir, err := os.MkdirTemp("", "waddle_bench_*")
+	if err != nil {
+		b.Fatalf("Failed to create temp directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	em := NewEncryptionManager(tempDir)
+	if err := em.InitializeKey(); err != nil {
+		b.Fatalf("Failed to initialize encryption: %v", err)
+	}
+
+	sm := NewSessionManager(tempDir, em)
+	if err := sm.Initialize(); err != nil {
+		b.Fatalf("Failed to initialize session manager: %v", err)
+	}
+	defer sm.Close()
+
+	// Create a session first to attach blocks to
+	session := &Session{
+		Date:      "2026-04-18",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	if err := sm.Create(session); err != nil {
+		b.Fatalf("Failed to create session: %v", err)
+	}
+
+	b.ResetTimer()
+
+	// Run benchmark
+	for i := 0; i < b.N; i++ {
+		block := &ActivityBlock{
+			BlockID:       fmt.Sprintf("12-%02d", i%60),
+			StartTime:     time.Now(),
+			EndTime:       time.Now().Add(time.Minute),
+			OCRText:       "test text",
+			MicroSummary:  "test summary",
+			CaptureSource: "benchmark",
+		}
+		if err := sm.AddBlock(int64(session.ID), "bench_app", block); err != nil {
+			b.Fatalf("Failed to add block: %v", err)
+		}
+	}
 }

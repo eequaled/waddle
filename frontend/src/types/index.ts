@@ -63,3 +63,8 @@ export interface KnowledgeCard {
   timestamp: string;
   status: 'pending' | 'processed' | 'failed';
 }
+
+export interface AppDetail {
+  appName: string;
+  blockCount: number;
+}

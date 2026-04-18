@@ -88,6 +88,35 @@ func (se *StorageEngine) Close() error {
 
 	return lastErr
 }
+// CleanupStaleEncryptedData checks for sessions that can't be decrypted.
+// Returns count of stale sessions found.
+func (se *StorageEngine) CleanupStaleEncryptedData() (int, error) {
+	db := se.sessionMgr.DB()
+	rows, err := db.Query("SELECT id, extracted_text_encrypted FROM sessions WHERE extracted_text_encrypted IS NOT NULL AND extracted_text_encrypted != ''")
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+
+	staleCount := 0
+	for rows.Next() {
+		var id int64
+		var encrypted string
+		if err := rows.Scan(&id, &encrypted); err != nil {
+			return staleCount, err
+		}
+
+		_, err := se.encryptionMgr.DecryptString(encrypted)
+		if err != nil {
+			staleCount++
+			// Note: At this time we only count the stale sessions. 
+			// Modifying the DB to 'mark' them isn't possible without a schema migration.
+			// The UI will detect stale sessions dynamically via search results anyway.
+		}
+	}
+
+	return staleCount, rows.Err()
+}
 
 // Session operations
 

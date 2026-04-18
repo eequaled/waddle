@@ -50,7 +50,7 @@ func NewPlatform(cfg *config.Config) (Platform, error) {
 }
 
 // UIReader
-func (s *stubPlatform) GetStructuredData(hwnd uintptr) (*UIResult, error) {
+func (s *stubPlatform) GetStructuredData(hwnd uintptr) (*WindowInfo, error) {
 	return nil, ErrNotImplemented
 }
 func (s *stubPlatform) Close() error { return nil }

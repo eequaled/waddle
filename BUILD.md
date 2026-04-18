@@ -47,6 +47,12 @@ wails dev
 
 ## Known Issues
 
+### Vite Dev Server Crash on First Run
+- **Symptom:** `wails dev` exits immediately with exit status `0xc0000409` (STATUS_STACK_BUFFER_OVERRUN).
+- **Workaround:** Simply run `wails dev` again — it works on the second attempt.
+- **Root cause:** DevWatcher process stack overflow during initial Vite startup.
+- **Status:** Non-blocking, does not affect production builds.
+
 ### Go 1.25.6 Compiler ICE
 
 `go build ./...` may hit an internal compiler error (race condition) on Go 1.25.6.

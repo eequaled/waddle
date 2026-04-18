@@ -1,14 +1,14 @@
 package vision
 
 import (
-	"context"
 	"testing"
+	"waddle/pkg/types"
 )
 
 // TestStubReturnsError verifies the stub implementation returns the expected error.
 func TestStubReturnsError(t *testing.T) {
 	t.Run("NewFlorenceEngine returns error without ONNX", func(t *testing.T) {
-		engine, err := NewFlorenceEngine("/fake/model/path")
+		engine, err := NewFlorenceEngine("/fake/model/path", "/fake/dll/path")
 		if err == nil {
 			t.Fatal("Expected error from stub NewFlorenceEngine, got nil")
 		}
@@ -23,7 +23,7 @@ func TestStubReturnsError(t *testing.T) {
 	t.Run("DetectUIElements returns error without ONNX", func(t *testing.T) {
 		// Even though NewFlorenceEngine fails, test DetectUIElements on a zero-value engine
 		engine := &FlorenceEngine{}
-		results, err := engine.DetectUIElements(context.Background(), []byte("fake image data"))
+		results, err := engine.DetectUIElements([]byte("fake image data"))
 		if err == nil {
 			t.Fatal("Expected error from stub DetectUIElements, got nil")
 		}
@@ -45,10 +45,10 @@ func TestStubReturnsError(t *testing.T) {
 
 // TestUIElementStruct verifies UIElement struct fields are accessible.
 func TestUIElementStruct(t *testing.T) {
-	elem := UIElement{
+	elem := types.UIElement{
 		Label:      "button",
 		Confidence: 0.95,
-		BBox:       [4]int{10, 20, 100, 50},
+		BBox:       [4]float32{10, 20, 100, 50},
 	}
 
 	if elem.Label != "button" {
@@ -57,7 +57,7 @@ func TestUIElementStruct(t *testing.T) {
 	if elem.Confidence != 0.95 {
 		t.Errorf("Expected confidence 0.95, got %f", elem.Confidence)
 	}
-	if elem.BBox != [4]int{10, 20, 100, 50} {
+	if elem.BBox != [4]float32{10, 20, 100, 50} {
 		t.Errorf("Expected bbox [10, 20, 100, 50], got %v", elem.BBox)
 	}
 }

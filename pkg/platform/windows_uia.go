@@ -20,7 +20,7 @@ func newWindowsUIReader() (*windowsUIReader, error) {
 	return &windowsUIReader{reader: r}, nil
 }
 
-func (w *windowsUIReader) GetStructuredData(hwnd uintptr) (*UIResult, error) {
+func (w *windowsUIReader) GetStructuredData(hwnd uintptr) (*WindowInfo, error) {
 	info, err := w.reader.GetWindowInfo(hwnd)
 	if err != nil {
 		return nil, err
@@ -28,7 +28,7 @@ func (w *windowsUIReader) GetStructuredData(hwnd uintptr) (*UIResult, error) {
 	if info == nil {
 		return nil, nil
 	}
-	return &UIResult{
+	return &WindowInfo{
 		HWND:        info.HWND,
 		ProcessID:   info.ProcessID,
 		ProcessName: info.ProcessName,

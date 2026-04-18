@@ -4,9 +4,9 @@
 build:
 	go build -p 1 ./...
 
-# Build with llama.cpp CGo support
+# Build with llama.cpp support (now purego, no tags needed)
 build-llama:
-	go build -p 1 -tags llama_cpp ./...
+	go build -p 1 ./...
 
 # Build with ONNX Runtime support
 build-onnx:
@@ -14,7 +14,7 @@ build-onnx:
 
 # Build with both native deps
 build-full:
-	go build -p 1 -tags "llama_cpp,onnx" ./...
+	go build -p 1 -tags onnx ./...
 
 # Dev server
 dev:

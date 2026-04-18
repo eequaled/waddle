@@ -7,12 +7,12 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { User, Settings, Clock, MessageSquare, Archive, Sparkles, LogOut, Brain } from "lucide-react";
+import { User, Settings, Clock, MessageSquare, Archive, Sparkles, LogOut, Brain, LayoutDashboard, List } from "lucide-react";
 import { ProfileImageCarousel } from './ProfileImageCarousel';
 
 interface ProfileMenuProps {
-    activeView: 'timeline' | 'chat' | 'archives' | 'insights' | 'knowledge';
-    setActiveView: (view: 'timeline' | 'chat' | 'archives' | 'insights' | 'knowledge') => void;
+    activeView: 'dashboard' | 'sessions' | 'timeline' | 'chat' | 'archives' | 'insights' | 'knowledge';
+    setActiveView: (view: 'dashboard' | 'sessions' | 'timeline' | 'chat' | 'archives' | 'insights' | 'knowledge') => void;
     setIsSettingsOpen: (isOpen: boolean) => void;
 }
 
@@ -56,6 +56,22 @@ export function ProfileMenu({ activeView, setActiveView, setIsSettingsOpen }: Pr
 
                 {/* Navigation */}
                 <div className="p-1 space-y-1">
+                    <DropdownMenuItem
+                        className={`cursor-pointer ${activeView === 'dashboard' ? 'bg-accent' : ''}`}
+                        onClick={() => setActiveView('dashboard')}
+                    >
+                        <LayoutDashboard className="mr-2 h-4 w-4" />
+                        <span>Dashboard</span>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                        className={`cursor-pointer ${activeView === 'sessions' ? 'bg-accent' : ''}`}
+                        onClick={() => setActiveView('sessions')}
+                    >
+                        <List className="mr-2 h-4 w-4" />
+                        <span>Sessions</span>
+                    </DropdownMenuItem>
+
                     <DropdownMenuItem
                         className={`cursor-pointer ${activeView === 'timeline' ? 'bg-accent' : ''}`}
                         onClick={() => setActiveView('timeline')}

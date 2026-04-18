@@ -141,7 +141,7 @@ func (p *windowsPlatform) Stop() error {
 
 // ── UIReader delegation ─────────────────────────────────────────────
 
-func (p *windowsPlatform) GetStructuredData(hwnd uintptr) (*UIResult, error) {
+func (p *windowsPlatform) GetStructuredData(hwnd uintptr) (*WindowInfo, error) {
 	return p.uia.GetStructuredData(hwnd)
 }
 

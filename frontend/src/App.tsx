@@ -10,6 +10,8 @@ import { NotificationPanel, Notification } from './components/NotificationPanel'
 import { RelatedMemories } from './components/RelatedMemories';
 import { InsightsView } from './components/InsightsView';
 import { KnowledgeCardsView } from './components/KnowledgeCardsView';
+import { Dashboard } from './pages/Dashboard';
+import { Sessions } from './pages/Sessions';
 import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import { Settings, Circle } from 'lucide-react';
@@ -22,7 +24,7 @@ import { Session, BlockData } from './types';
 function App() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [activeView, setActiveView] = useState<'timeline' | 'chat' | 'archives' | 'insights' | 'knowledge'>('timeline');
+  const [activeView, setActiveView] = useState<'dashboard' | 'sessions' | 'timeline' | 'chat' | 'archives' | 'insights' | 'knowledge'>('dashboard');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -409,13 +411,21 @@ function App() {
 
         {/* Main Content Area */}
         <div className="flex flex-1 overflow-hidden">
-          <ActivityTimeline
-            sessions={sessions}
-            selectedSessionId={selectedSessionId}
-            onSelectSession={setSelectedSessionId}
-            activeView={activeView}
-            onViewChange={setActiveView}
-          />
+          {activeView === 'dashboard' && <Dashboard />}
+          {activeView === 'sessions' && <Sessions onSelectSession={(id) => {
+            setSelectedSessionId(id);
+            setActiveView('timeline');
+          }} />}
+
+          {(activeView === 'timeline' || activeView === 'archives') && (
+            <ActivityTimeline
+              sessions={sessions}
+              selectedSessionId={selectedSessionId}
+              onSelectSession={setSelectedSessionId}
+              activeView={activeView as 'timeline' | 'archives'}
+              onViewChange={(view) => setActiveView(view as any)}
+            />
+          )}
 
           {activeView === 'timeline' && (
             <>

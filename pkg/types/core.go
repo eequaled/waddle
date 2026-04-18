@@ -79,10 +79,11 @@ type Session struct {
 	UpdatedAt       time.Time `json:"updatedAt"`
 
 	// Synthesis columns
-	EntitiesJSON    string `json:"entitiesJson"`    // JSON array of extracted entities
-	SynthesisStatus string `json:"synthesisStatus"` // "pending", "completed", "failed"
-	AISummary       string `json:"aiSummary"`       // AI-generated summary
-	AIBullets       string `json:"aiBullets"`       // JSON array of 3 bullet points
+	EntitiesJSON     string `json:"entitiesJson"`    // JSON array of extracted entities
+	SynthesisStatus  string `json:"synthesisStatus"` // "pending", "completed", "failed"
+	AISummary        string `json:"aiSummary"`       // AI-generated summary
+	AIBullets        string `json:"aiBullets"`       // JSON array of 3 bullet points
+	EncryptionStatus string `json:"encryptionStatus,omitempty"` // "stale" if decryption failed
 
 	// Relationships (loaded on demand)
 	Activities  []AppActivity `json:"activities,omitempty"`
@@ -222,11 +223,12 @@ type FocusEvent struct {
 	Element   string    `json:"element"`
 }
 
-// UIResult represents a UI detection result.
-type UIResult struct {
-	Label      string  `json:"label"`
-	Confidence float32 `json:"confidence"`
-	BBox       [4]int  `json:"bbox"`
+// UIElement represents a detected UI element from Florence-2.
+type UIElement struct {
+	BBox       [4]float32 `json:"bbox"`       // [x1, y1, x2, y2] normalized coordinates
+	Label      string     `json:"label"`      // e.g., "button", "text", "input"
+	Confidence float32    `json:"confidence"` // confidence score
+	Text       string     `json:"text"`       // OCR text if applicable
 }
 
 // ActionSpec represents an action specification.

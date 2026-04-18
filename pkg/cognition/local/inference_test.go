@@ -5,22 +5,22 @@ import (
 	"testing"
 )
 
-// TestStubNewLocalInference verifies that the stub returns an appropriate error
-// when the llama_cpp build tag is not set.
-func TestStubNewLocalInference(t *testing.T) {
+// TestNewLocalInference verifies that it handles missing DLLs gracefully
+func TestNewLocalInference(t *testing.T) {
 	li, err := NewLocalInference("/path/to/model.gguf")
 
+	// Since we are running tests without llama.dll present, it should error
 	if err == nil {
-		t.Errorf("Expected error from stub NewLocalInference, got nil")
+		t.Errorf("Expected error from NewLocalInference due to missing DLL, got nil")
 	}
 
 	if li != nil {
-		t.Errorf("Expected nil LocalInference from stub, got non-nil")
+		t.Errorf("Expected nil LocalInference when DLL missing, got non-nil")
 	}
 
-	// Verify error message mentions build tag
+	// Verify error message mentions llama.dll
 	if err != nil {
-		expectedSubstr := "llama_cpp"
+		expectedSubstr := "llama.dll"
 		found := false
 		for i := 0; i <= len(err.Error())-len(expectedSubstr); i++ {
 			if err.Error()[i:i+len(expectedSubstr)] == expectedSubstr {
@@ -29,15 +29,13 @@ func TestStubNewLocalInference(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("Error should mention 'llama_cpp' build tag, got: %v", err)
+			t.Errorf("Error should mention 'llama.dll', got: %v", err)
 		}
 	}
 }
 
-// TestStubPredict verifies that stub Predict returns an error.
-// This test is a placeholder — when the CGo spike succeeds, a parallel
-// test with //go:build llama_cpp will exercise the real inference path.
-func TestStubPredict(t *testing.T) {
+// TestPredict verifies Predict handles missing state.
+func TestPredict(t *testing.T) {
 	// In stub mode, NewLocalInference returns nil, so we can't call Predict.
 	// This test validates that the stub constructor error path is correct.
 	li, err := NewLocalInference("model.gguf")
@@ -51,8 +49,8 @@ func TestStubPredict(t *testing.T) {
 	// If err != nil (expected in stub mode), the test passes.
 }
 
-// TestStubClose verifies that stub Close is a safe no-op.
-func TestStubClose(t *testing.T) {
+// TestClose verifies Close is a safe no-op.
+func TestClose(t *testing.T) {
 	// Close on nil should not panic
 	var li *LocalInference
 	if li != nil {

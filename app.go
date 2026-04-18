@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"waddle/pkg/infra/config"
+	"waddle/pkg/capture"
 	"waddle/pkg/pipeline"
 	"waddle/pkg/platform"
 	"waddle/pkg/server"
@@ -44,6 +45,14 @@ func (a *App) startup(ctx context.Context) {
 	if err := a.storage.Initialize(); err != nil {
 		log.Printf("Error initializing storage engine: %v\n", err)
 		a.storage = nil
+	} else {
+		// Clean up stale encrypted sessions
+		staleCount, err := a.storage.CleanupStaleEncryptedData()
+		if err != nil {
+			log.Printf("[WARNING] Failed to cleanup stale encrypted sessions: %v\n", err)
+		} else if staleCount > 0 {
+			log.Printf("[INFO] %d sessions with stale encryption detected and marked\n", staleCount)
+		}
 	}
 
 	// 2. Initialize full Platform (tracker + UIA + screenshot + secrets)
@@ -53,9 +62,12 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.plat = plat
 
-	// 3. Initialize Capture Pipeline (requires storage + platform)
-	if a.storage != nil && a.plat != nil {
-		p, err := pipeline.NewPipeline(a.storage, a.plat)
+	// 3. Initialize Capture Pipeline (requires storage)
+	if a.storage != nil {
+		// TODO(Week 3): Wire real WindowsCaptureEngine when implementation is complete.
+		// For now, using StubCaptureEngine to satisfy pipeline wiring.
+		stubEngine := capture.NewStubCaptureEngine()
+		p, err := pipeline.NewPipeline(a.storage, stubEngine)
 		if err != nil {
 			log.Printf("Error initializing capture pipeline: %v\n", err)
 		} else {

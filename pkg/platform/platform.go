@@ -34,12 +34,12 @@ const (
 	ProcessStop
 )
 
-// ── UIResult ────────────────────────────────────────────────────────
+// ── WindowInfo ──────────────────────────────────────────────────────
 
-// UIResult is the portable representation of window information extracted
+// WindowInfo is the portable representation of window information extracted
 // via UI Automation. Fields mirror uia.WindowInfo but use only stdlib types
 // so consumers never import the uia package directly.
-type UIResult struct {
+type WindowInfo struct {
 	HWND        uintptr
 	ProcessID   uint32
 	ProcessName string
@@ -62,7 +62,7 @@ type WindowTracker interface {
 
 // UIReader extracts structured data from a window via accessibility APIs.
 type UIReader interface {
-	GetStructuredData(hwnd uintptr) (*UIResult, error)
+	GetStructuredData(hwnd uintptr) (*WindowInfo, error)
 	Close() error
 }
 

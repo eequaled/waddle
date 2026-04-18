@@ -107,7 +107,7 @@ var (
 	ErrSessionAlreadyExists = NewStorageError(ErrConflict, "session already exists", nil)
 	ErrInvalidDate          = NewStorageError(ErrValidation, "invalid date format", nil)
 	ErrEmptyRequiredField   = NewStorageError(ErrValidation, "required field is empty", nil)
-	ErrDecryptionFailed     = NewStorageError(ErrEncryption, "decryption failed", nil)
+	ErrDecryptionFailed     = NewStorageError(ErrEncryption, "decryption failed — data may be from a previous installation", nil)
 	ErrEncryptionFailed     = NewStorageError(ErrEncryption, "encryption failed", nil)
 	ErrDatabaseCorruption   = NewStorageError(ErrDatabase, "database corruption detected", nil)
 )

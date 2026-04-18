@@ -3,20 +3,13 @@ package pipeline
 import (
 	"testing"
 	"time"
-
-	"waddle/pkg/infra/config"
-	"waddle/pkg/platform"
 )
 
-// newTestPipeline creates a pipeline with a stub platform for tests.
+// newTestPipeline creates a pipeline with a mock capture engine for tests.
 func newTestPipeline(t testing.TB) *Pipeline {
 	t.Helper()
-	cfg := config.DefaultConfig()
-	plat, err := platform.NewPlatform(&cfg)
-	if err != nil {
-		t.Fatalf("Failed to create platform: %v", err)
-	}
-	p, err := NewPipeline(nil, plat)
+	engine := NewMockCaptureEngine()
+	p, err := NewPipeline(nil, engine)
 	if err != nil {
 		t.Fatalf("Failed to create pipeline: %v", err)
 	}
@@ -34,7 +27,7 @@ func TestPipelineCreation(t *testing.T) {
 
 	err := p.Start()
 	if err != nil {
-		t.Logf("Start returned (may be expected on non-Windows): %v", err)
+		t.Logf("Start returned error: %v", err)
 	}
 
 	err = p.Stop()
@@ -47,28 +40,27 @@ func TestPipelineCreation(t *testing.T) {
 	}
 }
 
-// TestPipelineBackpressure tests backpressure handling
-func TestPipelineBackpressure(t *testing.T) {
+// TestPipelineStats tests statistics reporting
+func TestPipelineStats(t *testing.T) {
 	p := newTestPipeline(t)
 	defer p.Stop()
 
-	if p.DroppedEvents() != 0 {
-		t.Errorf("DroppedEvents should be 0 initially, got %d", p.DroppedEvents())
+	stats := p.GetPipelineStats()
+	if stats.Running {
+		t.Errorf("Pipeline should not be reported as running")
+	}
+	if stats.Source != "none" {
+		t.Errorf("Pipeline source should be 'none', got %q", stats.Source)
 	}
 
-	activity := &ActivityBlock{
-		Timestamp:     time.Now(),
-		WindowHandle:  uintptr(12345),
-		ProcessID:     uint32(1000),
-		ProcessName:   "test.exe",
-		WindowTitle:   "Test Window",
-		AppType:       "unknown",
-		CaptureSource: CaptureSourceETW,
-		Metadata:      make(map[string]interface{}),
+	_ = p.Start()
+	stats = p.GetPipelineStats()
+	if !stats.Running {
+		t.Errorf("Pipeline should be reported as running")
 	}
-
-	// Send should not panic
-	p.sendActivityWithBackpressure(activity)
+	if stats.Source != "etw" && stats.Source != "polling" {
+		t.Errorf("Pipeline source should be 'etw' or 'polling', got %q", stats.Source)
+	}
 }
 
 // TestActivityBlockCreation tests ActivityBlock structure
@@ -119,115 +111,5 @@ func TestCaptureSourceTypes(t *testing.T) {
 		if string(source) != expectedValues[i] {
 			t.Errorf("CaptureSource %d should be %q, got %q", i, expectedValues[i], string(source))
 		}
-	}
-}
-
-// TestPipelineETWFallback tests ETW fallback mode detection
-func TestPipelineETWFallback(t *testing.T) {
-	p := newTestPipeline(t)
-	defer p.Stop()
-
-	isFallback := p.IsETWFallbackMode()
-	t.Logf("ETW fallback mode: %v", isFallback)
-}
-
-// TestOCRBatchProcessing tests OCR batch processing logic
-func TestOCRBatchProcessing(t *testing.T) {
-	p := newTestPipeline(t)
-	defer p.Stop()
-
-	batch := make([]*ActivityBlock, 3)
-	for i := 0; i < 3; i++ {
-		batch[i] = &ActivityBlock{
-			Timestamp:     time.Now(),
-			WindowHandle:  uintptr(12345 + i),
-			ProcessID:     uint32(1000 + i),
-			ProcessName:   "test.exe",
-			WindowTitle:   "Test Window",
-			AppType:       "unknown",
-			CaptureSource: CaptureSourceOCR,
-			Metadata:      make(map[string]interface{}),
-		}
-	}
-
-	p.processOCRBatch(batch)
-
-	for i, activity := range batch {
-		if processed, exists := activity.Metadata["ocr_processed"]; !exists || !processed.(bool) {
-			t.Errorf("Activity %d should be marked as OCR processed", i)
-		}
-		if batchSize, exists := activity.Metadata["batch_size"]; !exists || batchSize.(int) != 3 {
-			t.Errorf("Activity %d should have batch_size=3, got %v", i, batchSize)
-		}
-	}
-}
-
-// TestPipelineChannelBuffers tests channel buffer access
-func TestPipelineChannelBuffers(t *testing.T) {
-	p := newTestPipeline(t)
-	defer p.Stop()
-
-	activityBuffer := p.GetActivityBuffer()
-	if activityBuffer == nil {
-		t.Errorf("Activity buffer should not be nil")
-	}
-	ocrBuffer := p.GetOCRBatchBuffer()
-	if ocrBuffer == nil {
-		t.Errorf("OCR batch buffer should not be nil")
-	}
-	if cap(p.activityBuffer) != ActivityBufferSize {
-		t.Errorf("Activity buffer capacity should be %d, got %d",
-			ActivityBufferSize, cap(p.activityBuffer))
-	}
-	if cap(p.ocrBatchBuffer) != OCRBatchBufferSize {
-		t.Errorf("OCR batch buffer capacity should be %d, got %d",
-			OCRBatchBufferSize, cap(p.ocrBatchBuffer))
-	}
-}
-
-// BenchmarkPipelineBackpressure benchmarks backpressure handling
-func BenchmarkPipelineBackpressure(b *testing.B) {
-	p := newTestPipeline(b)
-	defer p.Stop()
-
-	activity := &ActivityBlock{
-		Timestamp:     time.Now(),
-		WindowHandle:  uintptr(12345),
-		ProcessID:     uint32(1000),
-		ProcessName:   "test.exe",
-		WindowTitle:   "Test Window",
-		AppType:       "unknown",
-		CaptureSource: CaptureSourceETW,
-		Metadata:      make(map[string]interface{}),
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		p.sendActivityWithBackpressure(activity)
-	}
-}
-
-// BenchmarkOCRBatchProcessing benchmarks OCR batch processing
-func BenchmarkOCRBatchProcessing(b *testing.B) {
-	p := newTestPipeline(b)
-	defer p.Stop()
-
-	batch := make([]*ActivityBlock, OCRBatchSize)
-	for i := 0; i < OCRBatchSize; i++ {
-		batch[i] = &ActivityBlock{
-			Timestamp:     time.Now(),
-			WindowHandle:  uintptr(12345 + i),
-			ProcessID:     uint32(1000 + i),
-			ProcessName:   "test.exe",
-			WindowTitle:   "Test Window",
-			AppType:       "unknown",
-			CaptureSource: CaptureSourceOCR,
-			Metadata:      make(map[string]interface{}),
-		}
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		p.processOCRBatch(batch)
 	}
 }

@@ -41,8 +41,8 @@ func (sm *SessionManager) Initialize() error {
 		return NewStorageError(ErrFileSystem, "failed to create database directory", err)
 	}
 
-	// Open database with WAL mode and foreign keys enabled
-	db, err := sql.Open("sqlite", sm.dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)")
+	// Open database with WAL mode, foreign keys, and performance optimizations
+	db, err := sql.Open("sqlite", sm.dbPath+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(ON)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=cache_size(-20000)&_pragma=temp_store(MEMORY)")
 	if err != nil {
 		return NewStorageError(ErrDatabase, "failed to open database", err)
 	}
@@ -236,7 +236,8 @@ func (sm *SessionManager) Search(query string, page, pageSize int) ([]SearchResu
 			decrypted, err := sm.encryptionMgr.DecryptString(encryptedText.String)
 			if err != nil {
 				// Log error but don't fail the search
-				session.ExtractedText = "[decryption failed]"
+				session.ExtractedText = ""
+				session.EncryptionStatus = "stale"
 			} else {
 				session.ExtractedText = decrypted
 			}
@@ -381,7 +382,8 @@ func (sm *SessionManager) SemanticSearch(query string, topK int, dateRange *Date
 			decrypted, err := sm.encryptionMgr.DecryptString(encryptedText.String)
 			if err != nil {
 				// Log error but don't fail the search
-				session.ExtractedText = "[decryption failed]"
+				session.ExtractedText = ""
+				session.EncryptionStatus = "stale"
 			} else {
 				session.ExtractedText = decrypted
 			}
