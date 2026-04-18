@@ -7,8 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"waddle/pkg/infra/config"
 	"waddle/pkg/capture"
+	"waddle/pkg/infra/config"
 	"waddle/pkg/pipeline"
 	"waddle/pkg/platform"
 	"waddle/pkg/server"
@@ -51,7 +51,7 @@ func (a *App) startup(ctx context.Context) {
 		if err != nil {
 			log.Printf("[WARNING] Failed to cleanup stale encrypted sessions: %v\n", err)
 		} else if staleCount > 0 {
-			log.Printf("[INFO] %d sessions with stale encryption detected and marked\n", staleCount)
+			log.Printf("[INFO] %d sessions with stale encryption detected\n", staleCount)
 		}
 	}
 
